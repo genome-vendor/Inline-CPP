@@ -2,7 +2,7 @@ BEGIN {
    print "1..2\n";
 }
 
-use Inline Config => BLIB => './blib_test';
+use Inline Config => DIRECTORY => './blib_test';
 
 use strict;
 use Inline CPP => <<END; 

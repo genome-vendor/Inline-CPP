@@ -21,6 +21,6 @@ close CRAZY;
 WriteMakefile(
 	      NAME => 'Inline::CPP',
 	      VERSION_FROM => 'CPP.pm',
-	      PREREQ_PM => { Inline => 0.30 },
+	      PREREQ_PM => { Inline => 0.31 },
 	      clean => {FILES => 'blib_test/'},
 	     );
