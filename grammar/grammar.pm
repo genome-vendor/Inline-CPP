@@ -272,7 +272,7 @@ subexpr: /$Inline::CPP::grammar::number/
        | /$Inline::CPP::grammar::string/
        | /$Inline::CPP::grammar::funccall/
        | UOP subexpr
-OP: '+' | '-' | '*' | '/' | '^' | '&' | '|' | '%'
+OP: '+' | '-' | '*' | '/' | '^' | '&' | '|' | '%' | '||' | '&&'
 UOP: '~' | '!' | '-' | '*' | '&'
 
 TYPE: /\w+/
@@ -330,15 +330,13 @@ sub strip_ellipsis {
 	next unless $args->[$i]{name} eq '...';
 	# if it's the first one, just strip it
 	if ($i==0) {
-	    substr($parser->{ILSM}{code}, $args->[$i]{offset} - 3, 3) =
-	      " " x 3;
+	    substr($parser->{ILSM}{code}, $args->[$i]{offset} - 3, 3) = "   ";
 	}
 	else {
 	    my $prev = $i - 1;
 	    my $prev_offset = $args->[$prev]{offset};
 	    my $length = $args->[$i]{offset} - $prev_offset;
-	    substr($parser->{ILSM}{code}, $prev_offset, $length) =
-	      " " x $length;
+	    substr($parser->{ILSM}{code}, $prev_offset, $length) =~ s/\S/ /g;
 	}
     }
 }

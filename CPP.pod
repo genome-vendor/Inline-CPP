@@ -28,6 +28,22 @@ The C<Inline::CPP> module allows you to put C++ source code directly
 "inline" in a Perl script or module. You code classes or functions in
 C++, and you can use them as if they were written in Perl.
 
+=head1 Choosing a C++ Compiler
+
+Inline::CPP just parses your C++ code and creates bindings to it. Like 
+Inline::C, you will need a suitable compiler the first time you run the
+script. Choosing a C++ compiler can prove difficult, because Perl is 
+written in C, not C++.
+
+Here's the rule: use any C++ compiler that's compatible with the compiler
+which built perl. For instance, if perl was built with C<gcc>, use C<g++>.
+If you're on a Sun or an IRIX box and the system C compiler C<cc> built perl,
+then use the system C++ compiler, C<CC>. 
+
+Some compilers actually compile both C and C++ with the same compiler. 
+Microsoft's C<cl.exe> is one such compiler -- you pass it the <-TP> flag
+to convince it that you want C++ mode.
+
 =head1 Using Inline::CPP
 
 Inline::CPP is very similar to Inline::C. It uses a grammar to
@@ -103,7 +119,7 @@ Adds a new entry to the end of the list of alternative libraries to
 bind with. MakeMaker will search through this list and use the first
 entry where all the libraries are found.
 
-   use Inline CPP => Config => ALTLIBS => '-L/my/other/lib -lfoo';
+   use Inline Config => ALTLIBS => '-L/my/other/lib -lfoo';
 
 See also the LIBS config option, which appends to the last entry in
 the list.
@@ -113,14 +129,14 @@ the list.
 Specifies extra statements to be automatically included. They will be
 added on to the defaults. A newline char will automatically be added. 
 
-   use Inline CPP => Config => AUTO_INCLUDE => '#include "something.h"';
+   use Inline Config => AUTO_INCLUDE => '#include "something.h"';
 
 =head2 BOOT
 
 Specifies code to be run when your code is loaded. May not contain any
 blank lines. See L<perlxs> for more information.
 
-   use Inline CPP => Config => BOOT => 'foo();';
+   use Inline Config => BOOT => 'foo();';
 
 =head2 CC
 
@@ -137,7 +153,7 @@ the code just prior to parsing. The filters are executed one after another,
 each operating on the output of the previous one. You can pass in a code
 reference or the name of a prepackaged filter.
 
-   use Inline CPP => Config => FILTERS => [Strip_POD => \&myfilter];
+   use Inline Config => FILTERS => [Strip_POD => \&myfilter];
 
 The filter may do anything. The code is passed as the first argument, and
 it returns the filtered code.
@@ -147,7 +163,7 @@ it returns the filtered code.
 Specifies extra include directories. Corresponds to the MakeMaker
 parameter.
 
-   use Inline CPP => Config => INC => '-I/my/path';
+   use Inline Config => INC => '-I/my/path';
 
 =head2 LD
 
@@ -166,12 +182,12 @@ respecify them here.
 Specifies external libraries that should be linked into your
 code. Corresponds to the MakeMaker parameter.
 
-   use Inline CPP => Config => LIBS => '-L/your/path -lyourlib';
+   use Inline Config => LIBS => '-L/your/path -lyourlib';
 
 Unlike the LIBS configuration parameter used in Inline::C, successive
 calls to LIBS append to the previous calls. For example,
 
-   use Inline CPP => Config => LIBS => '-L/my/path', LIBS => '-lyourlib';
+   use Inline Config => LIBS => '-L/my/path', LIBS => '-lyourlib';
 
 will work correctly. If you want to add a new element to the list of 
 possible libraries to link with, use the Inline::CPP configuration ALTLIBS.
@@ -185,7 +201,7 @@ Specifies the name of the 'make' utility to use.
 Specifies a user compiled object that should be linked in. Corresponds
 to the MakeMaker parameter.
 
-   use Inline CPP => Config => MYEXTLIB => '/your/path/something.o';
+   use Inline Config => MYEXTLIB => '/your/path/something.o';
 
 =head2 PREFIX
 
@@ -194,7 +210,7 @@ functions when they are bound to Perl. Less useful than in C, because
 C++ mangles its function names so they don't conflict with C functions
 of the same name.
 
-   use Inline CPP => Config => PREFIX => 'ZLIB_';
+   use Inline Config => PREFIX => 'ZLIB_';
 
 This only affects C++ function names, not C++ class names or methods. 
 
@@ -205,9 +221,9 @@ spaces, since the arguments are always passed on the Perl Stack, not on
 the C stack. This is usually desired, since it allows functions with
 no fixed arguments (most compilers require at least one fixed argument). 
 
-   use Inline CPP => Config => PRESERVE_ELLIPSIS => 1;
+   use Inline Config => PRESERVE_ELLIPSIS => 1;
 or
-   use Inline CPP => Config => ENABLE => PRESERVE_ELLIPSIS;
+   use Inline Config => ENABLE => PRESERVE_ELLIPSIS;
 
 For an example of why PRESERVE_ELLIPSIS is normally not needed, see the 
 examples section, below.
@@ -224,23 +240,23 @@ Inline::CPP.
 
 You can invoke STRUCTS in several ways:
 
-   use Inline CPP => Config => STRUCTS => 'Foo';
+   use Inline Config => STRUCTS => 'Foo';
 or
-   use Inline CPP => Config => STRUCTS => ['Bar', 'Baz'];
+   use Inline Config => STRUCTS => ['Bar', 'Baz'];
 
 Binds the named structs to Perl. Emits warnings if a struct was requested 
 but could not be bound for some reason.
 
-   use Inline CPP => Config => ENABLE => 'STRUCTS';
+   use Inline Config => ENABLE => 'STRUCTS';
 or
-   use Inline CPP => Config => STRUCTS => 1;
+   use Inline Config => STRUCTS => 1;
 
 Enables binding structs to Perl. All structs which can be bound, will. This
 parameter overrides all requests for particular structs.
 
-   use Inline CPP => Config => DISABLE => 'STRUCTS';
+   use Inline Config => DISABLE => 'STRUCTS';
 or
-   use Inline CPP => Config => STRUCTS => 0;
+   use Inline Config => STRUCTS => 0;
 
 Disables binding structs to Perl. Overrides any other settings.
 
@@ -252,7 +268,7 @@ binds C structs to Perl.
 Specifies extra typemap files to use. These types will modify the
 behaviour of C++ parsing. Corresponds to the MakeMaker parameter.
 
-   use Inline CPP => Config => TYPEMAPS => '/your/path/typemap';
+   use Inline Config => TYPEMAPS => '/your/path/typemap';
 
 =head1 C++-Perl Bindings
 
@@ -413,7 +429,7 @@ Here's a useful function written in Perl that is relatively slow:
 
 Here's the same function written in C:
 
-   double average {
+   double average() {
       Inline_Stack_Vars;
       double avg = 0.0;
       for (int i=0; i<Inline_Stack_Items; i++) {
@@ -472,13 +488,13 @@ What's the point? Of B<course> C or C++ is faster than Perl. Well..., actually,
 that wasn't really the point; that was an aside. Look at the function 
 declaration:
 
-   double function(...)
+   double avg(...)
 
 Why didn't we need to use varargs macros to get at the arguments? Why didn't 
 the compiler complain that there were no required arguments? Because 
 Inline::C++ actually compiled this:
 
-   double function(   )
+   double avg(   )
 
 When it bound to the function, it noticed the ellipsis and decided to get rid
 of it. Any function bound to Perl that has an ellipsis in it will have its 

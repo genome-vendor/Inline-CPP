@@ -9,7 +9,7 @@ use Carp;
 use vars qw(@ISA $VERSION);
 
 @ISA = qw(Inline::C);
-$VERSION = "0.20";
+$VERSION = "0.21";
 my $TYPEMAP_KIND = $Inline::CPP::grammar::TYPEMAP_KIND;
 
 #============================================================================
@@ -101,10 +101,10 @@ sub info {
     my $o = shift;
     my $info = "";
 
-    $o->parse unless $o->{parser};
-    my $data = $o->{parser}{data};
+    $o->parse unless $o->{ILSM}{parser};
+    my $data = $o->{ILSM}{parser}{data};
 
-    if (defined $o->{parser}{data}{classes}) {
+    if (defined $o->{ILSM}{parser}{data}{classes}) {
 	$info .= "The following C++ classes have been bound to Perl:\n";
 	for my $class (sort @{$data->{classes}}) {
 	    my @parents = grep { $_->{thing} eq 'inherits' }
@@ -135,7 +135,7 @@ sub info {
     else {
         $info .= "No C++ classes have been successfully bound to Perl.\n\n";
     }
-    if (defined $o->{parser}{data}{functions}) {
+    if (defined $o->{ILSM}{parser}{data}{functions}) {
 	$info .= "The following C++ functions have been bound to Perl:\n";
 	for my $function (sort @{$data->{functions}}) {
 	    my $func = $data->{function}{$function};
@@ -158,7 +158,7 @@ sub info {
 
 sub parse {
     my $o = shift;
-    return if $o->{parser};
+    return if $o->{ILSM}{parser};
     my $grammar = Inline::CPP::grammar::grammar()
       or croak "Can't find C++ grammar\n";
     $o->get_maps;
@@ -166,8 +166,8 @@ sub parse {
 
     $::RD_HINT++;
     require Parse::RecDescent;
-    my $parser = $o->{parser} = Parse::RecDescent->new($grammar);
-    $parser->{data}{typeconv} = $o->{typeconv};
+    my $parser = $o->{ILSM}{parser} = Parse::RecDescent->new($grammar);
+    $parser->{data}{typeconv} = $o->{ILSM}{typeconv};
     $parser->{ILSM} = $o->{ILSM}; # give parser access to config options
 
     $o->{ILSM}{code} = $o->filter(@{$o->{ILSM}{FILTERS}});
@@ -178,10 +178,10 @@ sub parse {
 
 sub write_XS {
     my $o = shift;
-    my ($pkg, $module, $modfname) = @{$o}{qw(pkg module modfname)};
+    my ($pkg, $module, $modfname) = @{$o->{API}}{qw(pkg module modfname)};
 
-    $o->mkpath($o->{build_dir});
-    open XS, "> $o->{build_dir}/$modfname.xs"
+    $o->mkpath($o->{API}{build_dir});
+    open XS, "> $o->{API}{build_dir}/$modfname.xs"
       or croak $!;
 
     print XS <<END;
@@ -191,7 +191,7 @@ $o->{ILSM}{code}
 $o->{STRUCT}{'.xs'}
 END
 
-    my $data = $o->{parser}{data};
+    my $data = $o->{ILSM}{parser}{data};
 
     warn("Warning: No Inline C++ functions or classes bound to Perl\n" .
 	 "Check your C++ for Inline compatibility.\n\n")
@@ -422,8 +422,8 @@ sub const_cast {
 
 sub write_typemap {
     my $o = shift;
-    my $filename = "$o->{build_dir}/CPP.map";
-    my $type_kind = $o->{typeconv}{type_kind};
+    my $filename = "$o->{API}{build_dir}/CPP.map";
+    my $type_kind = $o->{ILSM}{typeconv}{type_kind};
     my $typemap = "";
     $typemap .= $_ . "\t"x2 . $TYPEMAP_KIND . "\n" 
       for grep { $type_kind->{$_} eq $TYPEMAP_KIND } keys %$type_kind;
@@ -435,10 +435,10 @@ TYPEMAP
 $typemap
 OUTPUT
 $TYPEMAP_KIND
-$o->{typeconv}{output_expr}{$TYPEMAP_KIND}
+$o->{ILSM}{typeconv}{output_expr}{$TYPEMAP_KIND}
 INPUT
 $TYPEMAP_KIND
-$o->{typeconv}{input_expr}{$TYPEMAP_KIND}
+$o->{ILSM}{typeconv}{input_expr}{$TYPEMAP_KIND}
 END
     close TYPEMAP;
     $o->validate( TYPEMAPS => $filename );
@@ -452,9 +452,9 @@ sub typeconv {
     my $type = shift;
     my $dir = shift;
     my $preproc = shift;
-    my $tkind = $o->{typeconv}{type_kind}{$type};
+    my $tkind = $o->{ILSM}{typeconv}{type_kind}{$type};
     my $ret =
-      eval qq{qq{$o->{typeconv}{$dir}{$tkind}}};
+      eval qq{qq{$o->{ILSM}{typeconv}{$dir}{$tkind}}};
     chomp $ret;
     $ret =~ s/\n/\\\n/g if $preproc;
     return $ret;

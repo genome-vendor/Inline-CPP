@@ -33,26 +33,16 @@ When run, this complete program prints:
 -----------------------------------------------------------------------------
 FEATURES:
 
-Inline::CPP version 0.20 is a major upgrade from previous versions. It 
+Inline::CPP version 0.21 is a minor upgrade from previous versions. It 
 includes:
 
-+ C++ grammar greatly improved:
-  + Inline functions
-  + Inheritance
-  + Default parameters: void foo(int a=10, char *b="Hello", double a=pi());
-  + Unnamed parameters: void foo(int, char*, double);
-  + Support for public, private, and protected scopes
-  + Structs and classes are both bound to Perl
-  + Support for functions with no fixed arguments: void foo(...);
-+ Broken LIBS configuration option fixed.
-+ PREFIX option added.
-+ Optional Inline::Struct support added.
-+ Works on Cygwin (tested version 1.3.1)
++ Inline-0.40 compatibility
++ Documentation improvements
 
 -----------------------------------------------------------------------------
 INSTALLATION:
 
-This module requires Inline::C.pm version 0.33 or higher to be installed.
+This module requires Inline::C.pm version 0.40 or higher to be installed.
 
 To install Inline::CPP do this:
 
