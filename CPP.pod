@@ -228,6 +228,15 @@ or
 For an example of why PRESERVE_ELLIPSIS is normally not needed, see the 
 examples section, below.
 
+=head2 STD_IOSTREAM
+
+By default, Inline::CPP includes C<iostream.h> at the top of your code. This 
+option makes it include C<iostream> instead, which is the ANSI-compliant 
+version of the makefile. On non-GNU implementations, these files are not 
+compatible with one another.
+
+   use Inline CPP => Config => ENABLE => STD_IOSTREAM;
+
 =head2 STRUCTS
 
 Specifies whether to bind C structs into Perl using Inline::Struct. 

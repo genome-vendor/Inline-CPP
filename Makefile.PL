@@ -1,13 +1,19 @@
 use ExtUtils::MakeMaker;
 use Config;
 
+my %PREREQ_PM = (
+	Inline => '0.43',
+	'Inline::C' => '0.43',
+);
 #============================================================================
 # We'll do our own prerequisite checking, since MakeMaker does it
 # in a way that always fails: 'use Inline::C 0.33' will never work.
 #============================================================================
-eval { require Inline::C };
-warn "Warning: prerequisite Inline::C  version 0.42 not found"
-  if $@ or $Inline::C::VERSION < 0.42;
+for (sort keys %PREREQ_PM) {
+    eval "require $_";
+    warn "Warning: prerequisite $_ version $PREREQ_PM{$_} not found"
+      if $@ or ${$_ . "::VERSION"} < $PREREQ_PM{$_};
+}
 
 #============================================================================
 # Make an intelligent guess about what compiler to use
@@ -25,6 +31,16 @@ elsif ($Config{osname} eq 'linux') {
 elsif ($Config{osname} eq 'cygwin') {
     $cc_guess = 'g++';
     $libs_guess = '-lstdc++';
+}
+elsif ($Config{osname} eq 'solaris' or $Config{osname} eq 'SunOS') {
+    if ($Config{cc} eq 'gcc') {
+        $cc_guess = 'g++';
+	$libs_guess = '-lstdc++';
+    }
+    else {
+	$cc_guess = 'CC';
+	$libs_guess ='-lCrun';
+    }
 }
 # Sane defaults for other (probably unix-like) operating systems
 else {
@@ -57,8 +73,5 @@ close CPP;
 WriteMakefile(
 	      NAME => 'Inline::CPP',
 	      VERSION_FROM => 'CPP.pm',
-	      PREREQ_PM => { 
-		Inline => 0.42,
-	      },
 	      clean => {FILES => '_Inline/ grammar/_Inline'},
 	     );

@@ -1,4 +1,5 @@
-BEGIN { print "1..2\n"; }
+use Test;
+BEGIN { plan tests => 2 }
 use Inline CPP => <<'END';
 
 int foo(int a=10) { return a; }
@@ -16,7 +17,5 @@ class Freak {
 };
 
 END
-print "not " unless Freak->new->foo == 8;
-print "ok 1\n";
-print "not " unless foo == 10;
-print "ok 2\n";
+ok(Freak->new->foo, 8);
+ok(foo, 10);

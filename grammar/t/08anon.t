@@ -1,4 +1,5 @@
-BEGIN { print "1..1\n"; }
+use Test;
+BEGIN { plan tests => 1 }
 use Inline CPP => <<'END';
 
 class Foo {
@@ -15,5 +16,4 @@ int add(int a, int b) { return a + b; }
 
 END
 
-print "not " unless Foo->new(10, 11);
-print "ok 1\n";
+ok(defined Foo->new(10, 11));

@@ -1,15 +1,13 @@
-BEGIN { print "1..3\n"; }
+use Test;
+BEGIN { plan tests => 3 }
 use Inline CPP;
 use Data::Dumper;
 
 my @list = return_list();
 print Dumper \@list;
-print "not " unless $list[0] == 1;
-print "ok 1\n";
-print "not " unless $list[1] eq 'Hello?';
-print "ok 2\n";
-print "not " unless $list[2] == 15.6;
-print "ok 3\n";
+ok($list[0], 1);
+ok($list[1], 'Hello?');
+ok($list[2], 15.6);
 
 print Dumper return_void();
 
@@ -26,5 +24,5 @@ void return_list() {
 }
 
 void return_void() {
-    cout << "Hello!\n";
+    printf("Hello!\n");
 }

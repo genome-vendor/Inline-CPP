@@ -1,4 +1,5 @@
-BEGIN { print "1..1\n" }
+use Test;
+BEGIN { plan tests => 1 }
 use Inline CPP => <<'END';
 
 struct Fizzle {
@@ -18,5 +19,4 @@ struct Fizzle {
 END
 
 my $o = new Fizzle;
-print "not " unless $o->get_q == 0;
-print "ok 1\n";
+ok($o->get_q, 0);

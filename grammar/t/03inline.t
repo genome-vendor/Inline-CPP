@@ -1,47 +1,44 @@
-BEGIN {
-   print "1..2\n";
-}
+use Test;
+BEGIN { plan tests => 2 }
 
 use Inline CPP; 
 use strict;
 
 my $obj = new Color;
-print "not " unless ref $obj eq 'main::Color';
-print "ok 1\n";
+ok(ref $obj, 'main::Color');
 
 $obj->set_color(15);
 print $obj->get_color, "\n";
 
-print "not " unless $obj->get_color eq 15;
-print "ok 2\n";
+ok($obj->get_color, 15);
 
 __END__
 __CPP__
 void prn() {
-    cout << "prn() called!" << endl;
+    printf("prn() called!\n");
 }
 
 class Color {
  public:
   Color() 
   {
-    cout << "new Color object created..." << endl;
+    printf("new Color object created...\n");
   }
 
   ~Color()
   {
-    cout << "Color object being destroyed..." << endl;
+    printf("Color object being destroyed...\n");
   }
 
   int get_color() 
   {
-    cout << "Color::get_color called. Returning " << color << endl;
+    printf("Color::get_color called. Returning %i\n", color);
     return color;
   }
 
   void set_color(int a)
   {
-    cout << "Color::set_color(" << a << ")" << endl;
+    printf("Color::set_color(%i)\n", a);
     color = a;
   }
 

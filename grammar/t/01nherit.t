@@ -1,6 +1,5 @@
-BEGIN {
-  print "1..5\n";
-}
+use Test;
+BEGIN { plan tests => 5 }
 
 use Inline CPP => <<'END';
 
@@ -13,7 +12,7 @@ class Foo {
    ~Foo() { }
 
    int get_secret() { return secret; }
-   int set_secret(int s) { secret = s; }
+   void set_secret(int s) { secret = s; }
 
  protected:
    int secret;
@@ -30,21 +29,17 @@ class Bar : public Foo {
 END
 
 # If it works, it will print this. Otherwise it won't.
-print "ok 1\n";
+ok(1);
 
 # Test Foo
 my $o = new Foo;
-print "not " unless $o->get_secret() == 0;
-print "ok 2\n";
+ok($o->get_secret(), 0);
 $o->set_secret(539);
-print "not " unless $o->get_secret() == 539;
-print "ok 3\n";
+ok($o->get_secret(), 539);
 
 # Test Bar
 my $p = new Bar(11);
-print "not " unless $p->get_secret() == 11;
-print "ok 4\n";
+ok($p->get_secret(), 11);
 $p->set_secret(21);
-print "not " unless $p->get_secret() == 42;
-print "ok 5\n";
+ok($p->get_secret(), 42);
 

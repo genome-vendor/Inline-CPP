@@ -1,8 +1,13 @@
-BEGIN { print "1..1\n"; }
+use Test;
+BEGIN { plan tests => 6 }
 use Inline CPP;
 
-print "not " unless sum(1, 2, 3, 4, 5) == 15;
-print "ok 1\n";
+ok(sum(), 0);
+ok(sum(1), 1);
+ok(sum(1, 2), 3);
+ok(sum(1, 2, 3), 6);
+ok(sum(1, 2, 3, 4), 10);
+ok(sum(1, 2, 3, 4, 5), 15);
 
 __END__
 __CPP__

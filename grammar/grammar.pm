@@ -2,12 +2,12 @@ package Inline::CPP::grammar;
 
 use strict;
 use vars qw($TYPEMAP_KIND $VERSION);
-$VERSION = '0.20';
+$VERSION = '0.23';
 
 #============================================================================
 # Regular expressions to match code blocks, numbers, strings, parenthesized
-# expressions, and function calls. The more complex regular expressions can
-# only be implemented in 5.6.0 and above, so these are in eval-blocks.
+# expressions, function calls, and macros. The more complex regexes are only
+# implemented in 5.6.0 and above, so they're in eval-blocks.
 #
 # These are all adapted from the output of Damian Conway's excellent 
 # Regexp::Common module. In future, Inline::CPP may depend directly on it,
@@ -47,7 +47,7 @@ part: comment
 #         print "Found a class: $item[1]->[0]\n";
          my $class = $item[1]->[0];
          my @parts;
-         foreach (@{$item[1]->[1]}) { push @parts, @$_ }
+         for my $part (@{$item[1]->[1]}) { push @parts, @$_ for @$part }
          push @{$thisparser->{data}{classes}}, $class
            unless defined $thisparser->{data}{class}{$class};
          $thisparser->{data}{class}{$class} = \@parts;
@@ -81,7 +81,7 @@ class_def: class IDENTIFIER '{' class_part(s) '}' ';'
 	 | class IDENTIFIER ':' <leftop: inherit ',' inherit> '{' class_part(s) '}' ';'
 	   {
 #	       print "Found a class definition: $item[2]\n";
-	      push @{$item[6]}, $item[4]; 
+	      push @{$item[6]}, [$item[4]]; 
 	      [@item[2,6]]
 	   }
 
@@ -91,16 +91,21 @@ inherit: scope IDENTIFIER
 class_part: comment { [ {thing => 'comment'} ] }
 	  | scope ':' class_decl(s)
             {
-              $_->{scope} = $item[1] for @{$item[3]};
+	      for my $part (@{$item[3]}) {
+                  $_->{scope} = $item[1] for @$part;
+	      }
 	      $item[3]
 	    }
 	  | class_decl(s)
             {
-              $_->{scope} = $thisparser->{data}{defaultscope} for @{$item[1]};
+	      for my $part (@{$item[1]}) {
+                  $_->{scope} = $thisparser->{data}{defaultscope} 
+		    for @$part;
+	      }
 	      $item[1]
 	    }
 
-class_decl: comment { {thing => 'comment'} }
+class_decl: comment { [{thing => 'comment'}] }
           | method_def
 	    {
               $item[1]->{thing} = 'method';
@@ -111,12 +116,12 @@ class_decl: comment { {thing => 'comment'} }
 	      }
 	      Inline::CPP::grammar::strip_ellipsis($thisparser,
 						   $item[1]->{args});
-	      $item[1];
+	      [$item[1]];
 	    }
           | member_def
 	    {
-              $item[1]->{thing} = 'member';
-#	      print "class_decl found a member: $item[1]->{name}\n";
+#	      print "class_decl found one or more members:\n", Dumper(\@item);
+              $_->{thing} = 'member' for @{$item[1]};
 	      $item[1];
 	    }
 
@@ -148,21 +153,31 @@ method_def: IDENTIFIER '(' <leftop: arg ',' arg>(s?) ')' method_imp
 # By adding smod, we allow 'const' member functions. This would also bind to
 # incorrect C++ with the word 'static' after the argument list, but we don't
 # care at all because such code would never be compiled successfully.
+
+# By adding init, we allow constructors to initialize references. Again, we'll
+# allow them anywhere, but our goal is not to enforce c++ standards -- that's
+# the compiler's job.
 method_imp: smod(?) ';' { \0 }
-          | smod(?) code_block { \0 }
+          | smod(?) initlist(?) code_block { \0 }
           | smod(?) '=' '0' ';' { \1 }
           | smod(?) '=' '0' code_block { \0 }
 
-member_def: anytype IDENTIFIER ';'
+initlist: ':' <leftop: subexpr ',' subexpr>
+
+member_def: anytype <leftop: var ',' var> ';'
             { 
-#	      print "member found: $item[1]\n";
-	      {type => $item[1], name => $item[2]}
+	      my @retval;
+	      for my $def (@{$item[2]}) {
+	          my $type = join '', $item[1], @{$def->[0]};
+		  my $name = $def->[1];
+#	          print "member found: type=$type, name=$name\n";
+		  push @retval, { name => $name, type => $type };
+	      }
+	      \@retval;
             }
-          | anytype IDENTIFIER '=' all
-            { 
-#	      print "member found: $item[1]\n";
-	      {type => $item[1], name => $item[2]}
-            }
+
+var: star(s?) IDENTIFIER '=' expr { [@item[1,2]] }
+   | star(s?) IDENTIFIER          { [@item[1,2]] }
 
 arg: type IDENTIFIER '=' expr
      { 
@@ -188,8 +203,7 @@ IDENTIFIER: /[~_a-z]\w*/i
 
 # Parse::RecDescent is retarded in this one case: if a subrule fails, it
 # gives up the entire rule. This is a stupid way to get around that. 
-rtype: rtype1
-     | rtype2
+rtype: rtype2 | rtype1
 rtype1: TYPE star(s?)
         {
          $return = $item[1];
@@ -212,8 +226,7 @@ rtype2: modifier(s) TYPE star(s?)
          $thisparser->{data}{smod}{static} = 0;
 	}
 
-type: type1
-    | type2
+type: type2 | type1
 type1: TYPE star(s?)
         {
          $return = $item[1];
@@ -230,12 +243,13 @@ type2: modifier(s) TYPE star(s?)
            unless(defined$thisparser->{data}{typeconv}{valid_types}{$return});
 	}
 
-anytype: TYPE star(s?)
+anytype: anytype2 | anytype1
+anytype1: TYPE star(s?)
          {
            $return = $item[1];
            $return .= join '',' ',@{$item[2]} if @{$item[2]};
          }
-       | modifier(s) TYPE star(s?)
+anytype2: modifier(s) TYPE star(s?)
          {
            $return = $item[2];
            $return = join ' ',grep{$_}@{$item[1]},$return if @{$item[1]};
@@ -267,10 +281,14 @@ star: '*' | '&'
 code_block: /$Inline::CPP::grammar::code_block/
 
 # Consume expressions
-expr: <leftop: subexpr OP subexpr> { join '', @{$item[1]} }
-subexpr: /$Inline::CPP::grammar::number/
+expr: <leftop: subexpr OP subexpr> { 
+	my $o = join '', @{$item[1]}; 
+#	print "expr: $o\n";
+	$o;
+}
+subexpr: /$Inline::CPP::grammar::funccall/ # Matches a macro, too
        | /$Inline::CPP::grammar::string/
-       | /$Inline::CPP::grammar::funccall/
+       | /$Inline::CPP::grammar::number/
        | UOP subexpr
 OP: '+' | '-' | '*' | '/' | '^' | '&' | '|' | '%' | '||' | '&&'
 UOP: '~' | '!' | '-' | '*' | '&'

@@ -1,5 +1,22 @@
 Revision history for Perl extension Inline::CPP.
 
+0.23  Sun Jul 15 15:53:02 PDT 2001
+	- Allow declaration lists: int a, b;
+	- Allow initializer lists: Foo(double _o) : o(_o) { }
+	- Added a test case for both of these.
+
+0.23  Sat Jul  7 15:00:55 PDT 2001
+	- Renamed subs to use Inline::C's new naming scheme. Refactored some 
+	  common code into a new sub named call_or_instantiate().
+
+0.23  Fri Jul  6 19:51:23 PDT 2001
+	- Added smart-sense for Sun 2.6 (Solaris 6). Needed to include 
+	  libCrun.so.
+
+0.23  Wed Jun 20 00:56:58 PDT 2001
+	- Fixed a grammar bug to allow modifiers on member variables.
+	- Added a test case for it.
+
 0.22  Mon Jun 11 11:35:26 PDT 2001
 	- Compatible with Inline::0.42 (not backwards compatible).
 

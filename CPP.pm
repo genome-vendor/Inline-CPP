@@ -3,25 +3,24 @@ package Inline::CPP;
 use strict;
 require Inline::C;
 require Inline::CPP::grammar;
-use Config;
 use Carp;
 
 use vars qw(@ISA $VERSION);
 
 @ISA = qw(Inline::C);
-$VERSION = "0.22";
+$VERSION = "0.23";
 my $TYPEMAP_KIND = $Inline::CPP::grammar::TYPEMAP_KIND;
 
 #============================================================================
 # Register Inline::CPP as an Inline language module
 #============================================================================
 sub register {
-    my $suffix = ($^O eq 'aix') ? 'so' : $Config{so};
+    use Config;
     return {
 	    language => 'CPP',
 	    aliases => ['cpp', 'C++', 'c++', 'Cplusplus', 'cplusplus'],
 	    type => 'compiled',
-	    suffix => $suffix,
+	    suffix => $Config{dlext},
 	   };
 }
 
@@ -43,7 +42,7 @@ sub validate {
 		     };
     $o->{ILSM}{AUTO_INCLUDE} ||= <<END;
 #ifndef bool
-#include <iostream.h>
+#include <%iostream%>
 #endif
 #ifdef __CYGWIN__
 extern "C" {
@@ -57,7 +56,7 @@ extern "C" {
 #endif
 #ifdef bool
 #undef bool
-#include <iostream.h>
+#include <%iostream%>
 #endif
 END
     $o->{ILSM}{PRESERVE_ELLIPSIS} = 0 
@@ -82,15 +81,23 @@ END
 	      for (@$value);
 	    next;
 	}
-	if ($key eq 'PRESERVE_ELLIPSIS') {
-	    croak "Argument to PRESERVE_ELLIPSIS must be numeric" 
-	      unless $value =~ /^\d+$/;
-	    $o->{ILSM}{PRESERVE_ELLIPSIS} = $value;
+	if ($key eq 'PRESERVE_ELLIPSIS' or 
+	    $key eq 'STD_IOSTREAM') {
+	    croak "Argument to $key must be 0 or 1" 
+	      unless $value == 0 or $value == 1;
+	    $o->{ILSM}{$key} = $value;
 	    next;
 	}
 	push @propagate, $key, $value;
     }
 
+    # Replace %iostream% with the correct iostream library
+    my $iostream = "iostream";
+    $iostream .= ".h" unless (defined $o->{ILSM}{STD_IOSTREAM} and 
+			      $o->{ILSM}{STD_IOSTREAM});
+    $o->{ILSM}{AUTO_INCLUDE} =~ s|%iostream%|$iostream|g;
+
+    # Forward all unknown requests up to Inline::C
     $o->SUPER::validate(@propagate) if @propagate;
 }
 
@@ -115,7 +122,7 @@ sub info {
 			      map { $_->{scope} . " " . $_->{name} } @parents)
 		     ) if @parents;
 	    $info .= " {\n";
-	    for my $thing (sort { $a->{name} <=> $b->{name} } 
+	    for my $thing (sort { $a->{name} cmp $b->{name} } 
 			   @{$data->{class}{$class}}) {
 		my ($name, $scope, $type) = @{$thing}{qw(name scope thing)};
 		next unless $scope eq 'public' and $type eq 'method';
@@ -156,42 +163,38 @@ sub info {
     return $info;
 }
 
-sub parse {
+#============================================================================
+# Generate a C++ parser
+#============================================================================
+sub get_parser {
     my $o = shift;
-    return if $o->{ILSM}{parser};
     my $grammar = Inline::CPP::grammar::grammar()
       or croak "Can't find C++ grammar\n";
-    $o->get_maps;
-    $o->get_types;
-
     $::RD_HINT++;
     require Parse::RecDescent;
-    my $parser = $o->{ILSM}{parser} = Parse::RecDescent->new($grammar);
+    my $parser = Parse::RecDescent->new($grammar);
     $parser->{data}{typeconv} = $o->{ILSM}{typeconv};
     $parser->{ILSM} = $o->{ILSM}; # give parser access to config options
-
-    $o->{ILSM}{code} = $o->filter(@{$o->{ILSM}{FILTERS}});
-    Inline::Struct::parse($o) if $o->{STRUCT}{'.any'};
-    $parser->code($o->{ILSM}{code})
-      or croak "Bad C++ code passed to Inline at @{[caller(2)]}\n";
+    return $parser;
 }
 
-sub write_XS {
+#============================================================================
+# Intercept xs_generate and create the typemap file
+#============================================================================
+sub xs_generate {
     my $o = shift;
-    my ($pkg, $module, $modfname) = @{$o->{API}}{qw(pkg module modfname)};
+    $o->write_typemap;
+    $o->SUPER::xs_generate;
+}
 
-    $o->mkpath($o->{API}{build_dir});
-    open XS, "> $o->{API}{build_dir}/$modfname.xs"
-      or croak $!;
-
-    print XS <<END;
-$o->{ILSM}{AUTO_INCLUDE}
-$o->{STRUCT}{'.macros'}
-$o->{ILSM}{code}
-$o->{STRUCT}{'.xs'}
-END
-
+#============================================================================
+# Return bindings for functions and classes
+#============================================================================
+sub xs_bindings {
+    my $o = shift;
+    my ($pkg, $module) = @{$o->{API}}{qw(pkg module modfname)};
     my $data = $o->{ILSM}{parser}{data};
+    my $XS = '';
 
     warn("Warning: No Inline C++ functions or classes bound to Perl\n" .
 	 "Check your C++ for Inline compatibility.\n\n")
@@ -202,7 +205,7 @@ END
     for my $class (@{$data->{classes}}) {
 	my $proper_pkg = $pkg . "::$class";
 	# Set up the proper namespace
-	print XS <<END;
+	$XS .= <<END;
 MODULE = $module     	PACKAGE = $proper_pkg
 
 PROTOTYPES: DISABLE
@@ -240,16 +243,16 @@ END
 	    # generate an XS wrapper
 	    $ctor ||= ($name eq $class);
 	    $dtor ||= ($name eq "~$class");
-	    print XS $o->generate_XS($thing, $name, $class);
+	    $XS .= $o->wrap($thing, $name, $class);
 	}
 
 	# Provide default constructor and destructor:
-	print XS <<END unless ($ctor or $abstract);
+	$XS .= <<END unless ($ctor or $abstract);
 $class *
 ${class}::new()
 
 END
-	print XS <<END unless ($dtor or $abstract);
+	$XS .= <<END unless ($dtor or $abstract);
 void
 ${class}::DESTROY()
 
@@ -259,7 +262,7 @@ END
     my $prefix = (($o->{ILSM}{XS}{PREFIX}) ?
 		  "PREFIX = $o->{ILSM}{XS}{PREFIX}" :
 		  '');
-    print XS <<END;
+    $XS .= <<END;
 MODULE = $module     	PACKAGE = $pkg	$prefix
 
 PROTOTYPES: DISABLE
@@ -268,22 +271,16 @@ END
 
     for my $function (@{$data->{functions}}) {
 	next if $data->{function}{$function}{rtype} =~ 'static'; # special case
-	print XS $o->generate_XS($data->{function}{$function}, $function);
+	$XS .= $o->wrap($data->{function}{$function}, $function);
     }
 
-    if (defined $o->{ILSM}{XS}{BOOT} and
-	$o->{ILSM}{XS}{BOOT}) {
-	print XS <<END;
-BOOT:
-$o->{ILSM}{XS}{BOOT}
-END
-    }
-
-    close XS;
-    $o->write_typemap;
+    return $XS;
 }
 
-sub generate_XS {
+#============================================================================
+# Generate an XS wrapper around anything: a C++ method or function
+#============================================================================
+sub wrap {
     my $o = shift;
     my $thing = shift;
     my $name = shift;
@@ -292,21 +289,22 @@ sub generate_XS {
     my ($XS, $PREINIT, $CODE) = ("", "", "");
     my ($ctor, $dtor) = (0, 0);
 
-    if ($name eq $class) {
+    if ($name eq $class) { 	# ctor
 	$XS .= $class . " *\n" . $class . "::new";
 	$ctor = 1;
     }
-    elsif ($name eq "~$class") {
+    elsif ($name eq "~$class") { # dtor
 	$XS .= "void\n$class" . "::DESTROY";
 	$dtor = 1;
     }
-    elsif ($class) {
+    elsif ($class) {		# method
 	$XS .= "$thing->{rtype}\n$class" . "::$thing->{name}";
     }
-    else {
+    else {			# function
 	$XS .= "$thing->{rtype}\n$thing->{name}";
     }
 
+    # Filter out optional subroutine arguments
     my (@args, @opts, $ellipsis, $void);
     $_->{optional} ? push@opts,$_ : push@args,$_ for @{$thing->{args}};
     $ellipsis = pop @args if (@args and $args[-1]->{name} eq '...');
@@ -318,9 +316,10 @@ sub generate_XS {
 	      ")\n",
 	     );
 
-    for my $arg (@args) {
-	$XS .= "\t$arg->{type}\t$arg->{name}\n";
-    }
+    # Declare the non-optional arguments for XS type-checking
+    $XS .= "\t$_->{type}\t$_->{name}\n" for @args;
+
+    # Wrap "complicated" subs in stack-checking code
     if ($void or $ellipsis) {
 	$PREINIT .= "\tI32 *\t__temp_markstack_ptr;\n";
 	$CODE .= "\t__temp_markstack_ptr = PL_markstack_ptr++;\n";
@@ -346,45 +345,30 @@ sub generate_XS {
 	    $CODE .= "\t";
 	    $CODE .= "RETVAL = "
 	      unless $void;
-	    my $rval = '';
-	    $rval .= "new " if $ctor;
-	    $rval .= "delete " if $dtor;
-	    $rval .= "THIS->" if (length($class) and not ($ctor or $dtor));
-	    $rval .= join '', "$name(", 
-	      join (',', (map{$_->{name}}@args), @tmp), ")";
-	    $CODE .= $o->const_cast($thing, $rval) . ";\n";
+	    call_or_instantiate(\$CODE, $name, $ctor, $dtor, $class, 
+				$thing->{rconst}, $thing->{rtype},
+				(map { $_->{name} } @args), @tmp);
 	    $CODE .= "\tbreak; /* case " . ($i+1) . " */\n";
 	}
 	$CODE .= "default:\n";
 	$CODE .= "\tRETVAL = "
 	  unless $void;
-	my $rval = '';
-	$rval .= "new " if $ctor;
-	$rval .= "delete " if $dtor;
-	$rval .= "THIS->" if ($class and not ($ctor or $dtor));
-	$rval .= join '', "$name(", 
-	  join (',', map{$_->{name}}@args), ")";
-	$CODE .= $o->const_cast($thing, $rval) . ";\n";
+	call_or_instantiate(\$CODE, $name, $ctor, $dtor, $class, 
+			    $thing->{rconst}, $thing->{rtype},
+			    map { $_->{name} } @args);
 	$CODE .= "} /* switch(items) */ \n";
     }
     elsif ($void) {
 	$CODE .= "\t";
-	$CODE .= "new " if $ctor;
-	$CODE .= "delete " if $dtor;
-	$CODE .= "THIS->" if ($class and not ($ctor or $dtor));
-	$CODE .= join '', "$name(", 
-	  join (',', map{$_->{name}}@args), ");\n";
+	call_or_instantiate(\$CODE, $name, $ctor, $dtor, $class, 0, '', 
+			    map { $_->{name} } @args);
     }
     elsif ($ellipsis or $thing->{rconst}) {
 	$CODE .= "\t";
 	$CODE .= "RETVAL = ";
-	my $rval = '';
-	$rval .= "new " if $ctor;
-	$rval .= "delete " if $dtor;
-	$rval .= "THIS->" if ($class and not ($ctor or $dtor));
-	$rval .= join '', "$name(",
-	  join (',', map{$_->{name}}@args), ")";
-	$CODE .= $o->const_cast($thing, $rval) . ";\n";
+	call_or_instantiate(\$CODE, $name, $ctor, $dtor, $class, 
+			    $thing->{rconst}, $thing->{rtype},
+			    map { $_->{name} } @args);
     }
     if ($void) {
 	$CODE .= <<'END';
@@ -411,13 +395,27 @@ END
     return $XS;
 }
 
+sub call_or_instantiate {
+    my $text_ref = shift;
+    my ($name, $ctor, $dtor, $class, $const, $type, @args) = @_;
+
+    # Create an rvalue (which might be const-casted later).
+    my $rval = '';
+    $rval .= "new " if $ctor;
+    $rval .= "delete " if $dtor;
+    $rval .= "THIS->" if ($class and not ($ctor or $dtor));
+    $rval .= "$name(" . join (',', @args) . ")";
+
+    $$text_ref .= const_cast($rval, $const, $type);
+    $$text_ref .= ";\n"; # this is a convenience
+}
+
 sub const_cast {
-    my $o = shift;
-    my $thing = shift;
     my $value = shift;
-    return ($thing->{rconst}
-	    ? "const_cast<$thing->{rtype}>($value)"
-	    : $value);
+    my $const = shift;
+    my $type  = shift;
+    return $value unless $const and $type =~ /\*|\&/;
+    return "const_cast<$type>($value)";
 }
 
 sub write_typemap {
@@ -429,7 +427,7 @@ sub write_typemap {
       for grep { $type_kind->{$_} eq $TYPEMAP_KIND } keys %$type_kind;
     return unless length $typemap;
     open TYPEMAP, "> $filename"
-      or croak $!;
+      or croak "Error: Can't write to $filename: $!";
     print TYPEMAP <<END;
 TYPEMAP
 $typemap
@@ -441,7 +439,7 @@ $TYPEMAP_KIND
 $o->{ILSM}{typeconv}{input_expr}{$TYPEMAP_KIND}
 END
     close TYPEMAP;
-    $o->validate( TYPEMAPS => $filename );
+    $o->validate(TYPEMAPS => $filename);
 }
 
 # Generate type conversion code: perl2c or c2perl.

@@ -1,12 +1,10 @@
-BEGIN { print "1..3\n"; }
+use Test;
+BEGIN { plan tests => 3 }
 use Inline CPP;
 
-print "not " unless Parent1->new->do_something == 51;
-print "ok 1\n";
-print "not " unless Parent2->new->do_another == 17;
-print "ok 2\n";
-print "not " unless Child->new->yet_another == 3;
-print "ok 3\n";
+ok(Parent1->new->do_something, 51);
+ok(Parent2->new->do_another, 17);
+ok(Child->new->yet_another, 3);
 
 __END__
 __CPP__

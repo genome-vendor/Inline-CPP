@@ -1,4 +1,5 @@
-BEGIN { print "1..1\n"; }
+use Test;
+BEGIN { plan tests => 1 }
 use Inline CPP => <<'END';
 class Foo {
   public: 
@@ -8,5 +9,4 @@ class Foo {
     virtual const char *get_data_ro() { return "Hello Sally!\n"; }
 };
 END
-print "not " unless Foo->new->get_data_ro eq "Hello Sally!\n";
-print "ok 1\n";
+ok(Foo->new->get_data_ro, "Hello Sally!\n");

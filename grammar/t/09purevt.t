@@ -1,11 +1,12 @@
-BEGIN { print "1..2\n" }
+use Test;
+BEGIN { plan tests => 2 }
 use Inline CPP => <<'END';
 
 class Abstract {
   public:
     virtual char *text() = 0;
     virtual int greet(char *name) { 
-	cout << "Hello, " << name << endl; 
+	printf("Hello, %s\n", name); 
 	return 17; 
     }
 };
@@ -20,7 +21,5 @@ class Impl : public Abstract {
 END
 
 my $o = new Impl;
-print "not " unless $o->text eq 'Hello from Impl!';
-print "ok 1\n";
-print "not " unless $o->greet('Neil') == 17;
-print "ok 2\n"; 
+ok($o->text, 'Hello from Impl!');
+ok($o->greet('Neil'), 17);

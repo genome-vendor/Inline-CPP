@@ -1,10 +1,14 @@
-BEGIN { print "1..2\n"; }
+use Test;
+BEGIN { plan tests => 4 }
+
+ok(1);
+
 use Inline CPP => DATA => PREFIX => 'Foo_';
 
-print "not " unless identity("Neil") eq "Neil";
-print "ok 1\n";
-print "not " unless Foo->new->dummy eq "10";
-print "ok 2\n";
+ok(identity("Neil"), "Neil");
+ok(identity(identity("123")), "123");
+
+ok(Foo->new->dummy, "10");
 
 __END__
 __CPP__

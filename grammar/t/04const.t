@@ -1,4 +1,5 @@
-BEGIN { print "1..1\n"; }
+use Test;
+BEGIN { plan tests => 1 }
 use Inline CPP => <<'END';
 class Foo {
   public:
@@ -8,5 +9,4 @@ class Foo {
 };
 
 END
-print "not " unless Foo->new->data eq "Hello dolly!\n";
-print "ok 1\n";
+ok(Foo->new->data, "Hello dolly!\n");

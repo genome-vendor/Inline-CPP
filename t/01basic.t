@@ -1,8 +1,7 @@
-# C++-based OO Perl example
+use Test;
+BEGIN { plan tests => 10 }
 
-BEGIN {
-   print "1..1\n";
-}
+ok(1);
 
 my $obj1 = Soldier->new('Benjamin', 'Private', 11111);
 my $obj2 = Soldier->new('Sanders', 'Colonel', 22222);
@@ -14,7 +13,17 @@ for my $obj ($obj1, $obj2, $obj3) {
          $obj->get_rank, "\n";
 }
 
-print "ok 1\n";
+ok($obj1->get_serial, 11111);
+ok($obj1->get_name,   'Benjamin');
+ok($obj1->get_rank,   'Private');
+
+ok($obj2->get_serial, 22222);
+ok($obj2->get_name,   'Sanders');
+ok($obj2->get_rank,   'Colonel');
+
+ok($obj3->get_serial, 33333);
+ok($obj3->get_name,   'Matt');
+ok($obj3->get_rank,   'Sergeant');
 
 ###############################################################################
 

@@ -1,4 +1,5 @@
-BEGIN { print "1..1\n"; }
+use Test;
+BEGIN { plan tests => 2; }
 use Inline CPP => <<'END';
 
 class Foo {
@@ -7,9 +8,11 @@ class Foo {
 public:
    Foo() {} 
    ~Foo() {}
-   int zippo(int quack) { printf("Hello, world!\n"); }
+   void zippo(int quack) { printf("Hello, world!\n"); }
 };
 
 END
 
-print "ok 1\n";
+ok(1);
+Foo->new->zippo(10);
+ok(2);
