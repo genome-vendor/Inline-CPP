@@ -31,7 +31,7 @@ my $libs = prompt("What default libraries would you like to include?",
 		  $libs_guess);
 
 # Apply the defaults:
-open CPP, "CPP_pm";
+open CPP, "CPP.pm";
 my @lines = <CPP>;
 close CPP;
 
@@ -50,5 +50,5 @@ WriteMakefile(
 	      NAME => 'Inline::CPP',
 	      VERSION_FROM => 'CPP.pm',
 	      PREREQ_PM => { Inline => 0.31 },
-	      clean => {FILES => 'CPP.pm blib_test/'},
+	      clean => {FILES => 'blib_test/'},
 	     );

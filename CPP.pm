@@ -13,7 +13,7 @@ use Cwd qw(cwd);
 use vars qw(@ISA $VERSION);
 
 @ISA = qw(Inline);
-$VERSION = "0.13";
+$VERSION = "0.14";
 
 #============================================================================
 # Register Inline::CPP as an Inline language module
