@@ -1,0 +1,157 @@
+=head1 NAME
+
+Inline::CPP - Write Perl subroutines and classes in C++.
+
+=head1 SYNOPSIS
+
+   print "9 + 16 = ", add(9, 16), "\n";
+   print "9 - 16 = ", subtract(9, 16), "\n";
+
+   use Inline CPP => <<'END_OF_CPP_CODE';
+
+   int add(int x, int y) { 
+      return x + y;
+   }
+
+   int subtract(int x, inty) {
+      return x - y;
+   }
+
+   END_OF_CPP_CODE
+
+=head1 DESCRIPTION
+
+The C<Inline::CPP> module allows you to put C++ source code directly
+"inline" in a Perl script or module. You code classes or functions in
+C++, and you can use them as if they were written in Perl.
+
+=head2 Using the Inline::CPP Module
+
+Inline::CPP is very similar to L<Inline::C>. It uses a grammar to
+parse your C++ code, and binds to functions or classes which are
+recognized. If a function is recognized, it will be available from
+Perl space. If the function's signature is not recognized, it will not
+be available from Perl space, but will be available from other
+functions in C++. 
+
+Inline::CPP binds to functions using the same grammar as Inline::C.
+However, it contains an extended grammar for dealing with
+classes. Several features of C++ are simply not supported, such as
+template classes and inline function definitions.
+
+The following example shows how C++ snippets map into the Perl
+namespace:
+
+Example 1:
+
+   use Inline CPP => <<'END';
+
+   int doodle() { }
+
+   class Foo {
+     public:
+       Foo();
+       ~Foo();
+
+       int get_data();
+       void set_data(int a);
+     private:
+       int data;
+   };
+
+   Foo::Foo() { cout << "creating a Foo()" << endl; }
+   Foo::~Foo() { cout << "deleting a Foo()" << endl; }
+
+   int Foo::get_data() { return data; }
+   int Foo::set_data(int a) { data = a; }
+
+   END
+
+Perl's namespace will look very much like this: (assuming this script
+was run from main)
+
+   sub main::doodle { }
+
+   package main::Foo;
+
+   sub new { print "creating a Foo()\n"; bless {}, shift }
+   sub DESTROY { print "deleting a Foo()\n" }
+
+   sub get_data { my $o=shift; $o->{data} }
+   sub set_data { my $o=shift; $o->{data} = shift }
+
+The difference, of course, is that in the latter, non-Foo objects
+could directly access $o->{data}, but in C++ Foo::data is completely
+hidden.
+
+=head2 C++-Perl Bindings
+
+This section describes how the C<Perl> variables get mapped to C<C++>
+variables and back again.
+
+Perl uses a stack to pass arguments back and forth to subroutines. When
+a sub is called, it pops off all its arguments from the stack; when it's
+done, it pushes its return values back onto the stack.
+
+XS (Perl's language for creating C or C++ extensions for Perl) uses
+"typemaps" to turn SVs into C types and back again. This is done through
+various XS macro calls, casts, and the Perl API. XS also allows you to
+define your own mappings.
+
+C<Inline::CPP> uses a much simpler approach. It parses the system's
+typemap files and only binds to functions with supported types. You 
+can tell C<Inline::CPP> about custom typemap files too.
+
+If you have very complicated data structures in either C++ or Perl,
+you should just pass them as an SV* and do the conversion yourself in
+your C++ function.
+
+For more information on passing data between C, C++, and Perl, see
+L<Inline::C> and L<Inline::C-Cookbook>. For C<WMTYEWTK>, see the
+L<perlxs>, L<perlxstut>, L<perlapi>, and L<perlguts> manpages.
+
+=head1 SEE ALSO
+
+For general information about how C<Inline> binds code to Perl, see L<Inline>.
+
+For information on using C with Perl, see L<Inline::C> and
+L<Inline::C-Cookbook>. For C<WMTYEWTK>, see the L<perlxs>,
+L<perlxstut>, L<perlapi>, and L<perlguts> manpages.
+
+=head1 BUGS AND DEFICIENCIES
+
+When reporting a bug, please do the following:
+
+ - Put "use Inline REPORTBUG;" at the top of your code, or 
+   use the command line option "perl -MInline=REPORTBUG ...".
+ - Run your code.
+ - Follow the printed instructions.
+
+Here are some things to watch out for:
+
+=over 4
+
+=item 1
+
+The grammar used for parsing C++ is very simple, and does not allow
+several important features of C++:
+
+  o templates;
+  o inheritance;
+  o inline class methods;
+
+Other grammar problems will probably be noticed quickly.
+
+=back
+
+=head1 AUTHOR
+
+Neil Watkiss <NEILW@cpan.org>
+
+Brian Ingerson <INGY@cpan.org> is the author of Inline, Inline::C and
+Inline::CPR. His antics with object-oriented Perl using C convinced me
+it was time to add support for C++. He was responsible for much
+encouragement and many suggestions throughout the development of
+Inline::CPP.
+
+=head1 COPYRIGHT
