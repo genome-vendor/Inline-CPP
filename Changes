@@ -1,5 +1,12 @@
 Revision history for Perl extension Inline::CPP.
 
+0.25  Tue Aug 12 17:03:44 PDT 2003
+	[Accepted two patches from Nicholas Clark]
+	- works with Parse::RecDescent 1.90 and later
+	- use g++ in the same path as gcc, if perl was built with gcc
+	[Reported by Anthony Bouvier]
+	- fix a compile error in POD's example code
+
 0.24  Mon May 27 22:25:38 PDT 2002
 	[Accepted patch from Sean O'Rourke]
 	- unhandled types ignored, rather than causing an error

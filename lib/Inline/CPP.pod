@@ -20,8 +20,6 @@ Inline::CPP - Write Perl subroutines and classes in C++.
       return x - y;
    }
 
-   END_OF_CPP_CODE
-
 =head1 DESCRIPTION
 
 The C<Inline::CPP> module allows you to put C++ source code directly

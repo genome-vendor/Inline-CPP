@@ -33,14 +33,13 @@ When run, this complete program prints:
 -----------------------------------------------------------------------------
 FEATURES:
 
-Inline::CPP version 0.24 is a minor upgrade from previous versions. It
+Inline::CPP version 0.25 is a minor upgrade from previous versions. It
 includes:
 
-+ unhandled types ignored, rather than causing an error
-+ typenames and identifiers can now include more C++ line noise
-+ operators are correctly recognized (and ignored)
-+ nested classes are ignored
-+ non-inline method bodies are ignored
++ works with Parse::RecDescent 1.90 and later
++ use a fully-qualified path to g++ based on $Config{gccversion} if perl was
+  compiled with gcc
++ a syntax error in the POD has been fixed
 
 -----------------------------------------------------------------------------
 INSTALLATION:
@@ -70,4 +69,4 @@ inline-subscribe@perl.org to subscribe.
 
 Please send questions and comments to "Neil Watkiss" <NEILW@cpan.org>
 
-Copyright (c) 2000, Neil Watkiss. All Rights Reserved.  
+Copyright (c) 2003, Neil Watkiss. All Rights Reserved.  

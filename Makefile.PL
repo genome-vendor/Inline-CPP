@@ -12,7 +12,7 @@ my %PREREQ_PM = (
 for (sort keys %PREREQ_PM) {
     eval "require $_";
     warn "Warning: prerequisite $_ version $PREREQ_PM{$_} not found"
-      if $@ or ${$_ . "::VERSION"} < $PREREQ_PM{$_};
+      if $@ or ${"${_}::VERSION"} < $PREREQ_PM{$_};
 }
 
 #============================================================================
@@ -20,7 +20,11 @@ for (sort keys %PREREQ_PM) {
 #============================================================================
 my $cc_guess;
 my $libs_guess;
-if ($Config{osname} =~ /^MSWin/) {
+if ($Config{gccversion} and $Config{cc} =~ m#\bgcc\b[^/]*$#) {
+  ($cc_guess = $Config{cc}) =~ s[\bgcc\b([^/]*)$(?:)][g\+\+$1] ;
+    $libs_guess = '-lstdc++';
+}
+elsif ($Config{osname} =~ /^MSWin/) {
     $cc_guess = 'cl -TP';
     $libs_guess = 'MSVCIRT.LIB';
 }

@@ -1,8 +1,20 @@
 package Inline::CPP::grammar;
 
 use strict;
-use vars qw($TYPEMAP_KIND $VERSION);
-$VERSION = '0.24';
+use vars qw($TYPEMAP_KIND $VERSION $class_part $class_decl $star);
+$VERSION = '0.25';
+
+# Parse::RecDescent 1.90 and later have an incompatible change
+# 'The key of an %item entry for a repeated subrule now includes
+# the repetition specifier.'
+# Hence various hash keys may or may not need trailing '(s?)' depending on
+# the version of Parse::RecDescent we are using.
+
+require Parse::RecDescent;
+($class_part, $class_decl, $star) =
+  map {($Parse::RecDescent::VERSION > 1.89) ? "$_(s?)" : $_}
+  qw (class_part class_decl star);
+
 
 #============================================================================
 # Regular expressions to match code blocks, numbers, strings, parenthesized
@@ -116,7 +128,7 @@ typedef: 'typedef' class IDENTIFIER(?) '{' <commit> class_part(s?) '}' IDENTIFIE
        {
 	 my ($class, $parts);
          $class = $item[3][0] || 'anon_class'.($thisparser->{data}{anonclass}++);
-         ($class, $parts)= handle_class_def($thisparser, [$class, $item{class_part}]);
+         ($class, $parts)= handle_class_def($thisparser, [$class, $item{$Inline::CPP::grammar::class_part}]);
 	 { thing => 'typedef', name => $item[8], type => $class, body => $parts }
        }
        | 'typedef' IDENTIFIER IDENTIFIER ';'
@@ -140,13 +152,13 @@ enum_item: IDENTIFIER '=' <commit> /[0-9]+/
 
 class_def: class IDENTIFIER '{' <commit> class_part(s?) '}' ';' 
            { 
-              [@item{'IDENTIFIER','class_part'}]
+              [@item{'IDENTIFIER',$Inline::CPP::grammar::class_part}]
 	   }
 	 | class IDENTIFIER ':' <commit> <leftop: inherit ',' inherit>
             '{' class_part(s?) '}' ';'
 	   {
-	      push @{$item{class_part}}, [$item{__DIRECTIVE2__}];
-	      [@item{'IDENTIFIER','class_part'}]
+	      push @{$item{$Inline::CPP::grammar::class_part}}, [$item{__DIRECTIVE2__}];
+	      [@item{'IDENTIFIER',$Inline::CPP::grammar::class_part}]
 	   }
 
 inherit: scope IDENTIFIER 
@@ -155,10 +167,10 @@ inherit: scope IDENTIFIER
 class_part: comment { [ {thing => 'comment'} ] }
 	  | scope ':' <commit> class_decl(s?)
             {
-	      for my $part (@{$item{class_decl}}) {
+	      for my $part (@{$item{$Inline::CPP::grammar::class_decl}}) {
                   $_->{scope} = $item[1] for @$part;
 	      }
-	      $item{class_decl}
+	      $item{$Inline::CPP::grammar::class_decl}
 	    }
 	  | class_decl(s)
             {
@@ -336,7 +348,7 @@ type: type2 | type1
 type1: TYPE star(s?)
         {
          $return = $item[1];
-         $return .= join '',' ',@{$item{star}} if @{$item{star}};
+         $return .= join '',' ',@{$item{$Inline::CPP::grammar::star}} if @{$item{$Inline::CPP::grammar::star}};
 #	 print "type1: $return\n";
 #          return undef
 #            unless(defined$thisparser->{data}{typeconv}{valid_types}{$return});
@@ -345,7 +357,7 @@ type2: modifier(s) TYPE star(s?)
 	{
          $return = $item{TYPE};
          $return = join ' ',grep{$_}@{$item[1]},$return if @{$item[1]};
-         $return .= join '',' ',@{$item{star}} if @{$item{star}};
+         $return .= join '',' ',@{$item{$Inline::CPP::grammar::star}} if @{$item{$Inline::CPP::grammar::star}};
 #	 print "type2: $return\n";
 #          return undef
 #            unless(defined$thisparser->{data}{typeconv}{valid_types}{$return});
