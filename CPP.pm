@@ -12,7 +12,7 @@ use Cwd qw(cwd);
 use vars qw(@ISA $VERSION);
 
 @ISA = qw(Inline);
-$VERSION = "0.10";
+$VERSION = "0.11";
 
 #============================================================================
 # Register Inline::CPP as an Inline language module
@@ -22,6 +22,7 @@ sub register {
 	    language => 'CPP',
 	    aliases => ['cpp', 'C++', 'Cplusplus', 'c++'],
 	    type => 'compiled',
+	    suffix => 'so',
 	   };
 }
 
@@ -598,7 +599,7 @@ END
 	}
     }
 
-    if ($o->{config}{CLEAN_AFTER_BUILD} and 
+    if ($o->{config}{CLEAN_AFTER_BUILD} and
 	not $o->{config}{REPORTBUG}
        ) {
 	$o->rmpath($o->{config}{BLIB_I}, $modpname);

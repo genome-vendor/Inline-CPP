@@ -2,6 +2,7 @@ CPP.pm
 CPP.pod
 MANIFEST
 Makefile.PL
+README
 Grammar/Grammar.pm
 Grammar/MANIFEST
 Grammar/Makefile.PL
