@@ -33,16 +33,15 @@ When run, this complete program prints:
 -----------------------------------------------------------------------------
 FEATURES:
 
-Inline::CPP version 0.21 is a minor upgrade from previous versions. It 
+Inline::CPP version 0.22 is a minor upgrade from previous versions. It 
 includes:
 
-+ Inline-0.40 compatibility
-+ Documentation improvements
++ Inline-0.42 compatibility
 
 -----------------------------------------------------------------------------
 INSTALLATION:
 
-This module requires Inline::C.pm version 0.40 or higher to be installed.
+This module requires Inline::C.pm version 0.42 or higher to be installed.
 
 To install Inline::CPP do this:
 

@@ -9,7 +9,7 @@ use Carp;
 use vars qw(@ISA $VERSION);
 
 @ISA = qw(Inline::C);
-$VERSION = "0.21";
+$VERSION = "0.22";
 my $TYPEMAP_KIND = $Inline::CPP::grammar::TYPEMAP_KIND;
 
 #============================================================================

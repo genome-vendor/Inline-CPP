@@ -1,5 +1,8 @@
 Revision history for Perl extension Inline::CPP.
 
+0.22  Mon Jun 11 11:35:26 PDT 2001
+	- Compatible with Inline::0.42 (not backwards compatible).
+
 0.21  Wed Jun  6 08:55:50 PDT 2001
 	- Compatible with Inline::0.40 (not backwards compatible).
 	- Documentation improvements.

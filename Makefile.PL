@@ -6,8 +6,8 @@ use Config;
 # in a way that always fails: 'use Inline::C 0.33' will never work.
 #============================================================================
 eval { require Inline::C };
-warn "Warning: prerequisite Inline::C  version 0.33 not found"
-  if $@ or $Inline::C::VERSION < 0.33;
+warn "Warning: prerequisite Inline::C  version 0.42 not found"
+  if $@ or $Inline::C::VERSION < 0.42;
 
 #============================================================================
 # Make an intelligent guess about what compiler to use
@@ -58,7 +58,7 @@ WriteMakefile(
 	      NAME => 'Inline::CPP',
 	      VERSION_FROM => 'CPP.pm',
 	      PREREQ_PM => { 
-		Inline => 0.33,
+		Inline => 0.42,
 	      },
 	      clean => {FILES => '_Inline/ grammar/_Inline'},
 	     );
