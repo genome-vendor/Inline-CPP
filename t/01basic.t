@@ -1,7 +1,5 @@
 # C++-based OO Perl example
 
-use Inline Config => DIRECTORY => './blib_test';
-
 BEGIN {
    print "1..1\n";
 }
@@ -11,9 +9,9 @@ my $obj2 = Soldier->new('Sanders', 'Colonel', 22222);
 my $obj3 = Soldier->new('Matt', 'Sergeant', 33333);
 
 for my $obj ($obj1, $obj2, $obj3) {
-   print ($obj->get_serial, ") ",
-          $obj->get_name, " is a ",
-          $obj->get_rank, "\n");
+   print $obj->get_serial, ") ",
+         $obj->get_name, " is a ",
+         $obj->get_rank, "\n";
 }
 
 print "ok 1\n";

@@ -1,19 +1,16 @@
 package Inline::CPP;
 
 use strict;
-require Inline;
-require Inline::CPP::Grammar;
+require Inline::C;
+require Inline::CPP::grammar;
 use Config;
 use Carp;
-use Data::Dumper;
-use Parse::RecDescent;
-use FindBin;
-use Cwd qw(cwd);
 
 use vars qw(@ISA $VERSION);
 
-@ISA = qw(Inline);
-$VERSION = "0.14";
+@ISA = qw(Inline::C);
+$VERSION = "0.20";
+my $TYPEMAP_KIND = $Inline::CPP::grammar::TYPEMAP_KIND;
 
 #============================================================================
 # Register Inline::CPP as an Inline language module
@@ -29,132 +26,72 @@ sub register {
 }
 
 #============================================================================
-# Validate the C++ config options
+# Validate the C++ config options: Now mostly done in Inline::C
 #============================================================================
 sub validate {
     my $o = shift;
+    $o->{ILSM}{MAKEFILE}{CC} ||= '@COMPILER'; # default compiler
+    $o->{ILSM}{MAKEFILE}{LIBS} ||= ['@DEFAULTLIBS']; # default libs
 
-    $o->{CPP} = {};
-    $o->{CPP}{XS} = {};
-    $o->{CPP}{MAKEFILE} = {};
-    $o->{CPP}{MAKEFILE}{CC} ||= '@COMPILER'; # default compiler
-    $o->{CPP}{MAKEFILE}{LD} ||= '@LINKER';   # default linker
-    $o->{CPP}{MAKEFILE}{LIBS} ||= '@DEFAULTLIBS'; # default libs
-    $o->{CPP}{AUTO_INCLUDE} ||= <<'END';
-/* include this first, else g++ gets parse errors on some versions of perl */
+    # I haven't traced it out yet, but $o->{STRUCT} gets set before getting
+    # properly set from Inline::C's validate().
+    $o->{STRUCT} ||= {
+		      '.macros' => '',
+		      '.xs' => '',
+		      '.any' => 0, 
+		      '.all' => 0,
+		     };
+    $o->{ILSM}{AUTO_INCLUDE} ||= <<END;
+#ifndef bool
 #include <iostream.h>
-
+#endif
+#ifdef __CYGWIN__
+extern "C" {
+#endif
 #include "EXTERN.h"
 #include "perl.h"
 #include "XSUB.h"
 #include "INLINE.h"
+#ifdef __CYGWIN__
+}
+#endif
+#ifdef bool
+#undef bool
+#include <iostream.h>
+#endif
 END
+    $o->{ILSM}{PRESERVE_ELLIPSIS} = 0 
+      unless defined $o->{ILSM}{PRESERVE_ELLIPSIS};
 
-    while (@_) {
+    # Filter out the parameters we treat differently than Inline::C
+    my @propagate;
+    while(@_) {
 	my ($key, $value) = (shift, shift);
-
-	if ($key eq 'MAKE') {
-	    $o->{CPP}{$key} = $value;
-	    next;
-	}
-	if ($key eq 'CC' or
-	    $key eq 'LD') {
-	    $o->{CPP}{MAKEFILE}{$key} = $value;
-	    next;
-	}
 	if ($key eq 'LIBS') {
-	    add_list($o->{CPP}{MAKEFILE}, $key, $value, []);
+	    $value = [$value] unless ref $value eq 'ARRAY';
+	    my $num = scalar @{$o->{ILSM}{MAKEFILE}{LIBS}} - 1;
+	    $o->{ILSM}{MAKEFILE}{LIBS}[$num] .= ' ' . $_
+	      for (@$value);
 	    next;
 	}
-	if ($key eq 'INC' or
-	       $key eq 'MYEXTLIB' or
-	       $key eq 'CCFLAGS' or
-	       $key eq 'LDDLFLAGS') {
-	    add_string($o->{CPP}{MAKEFILE}, $key, $value, '');
+	if ($key eq 'ALTLIBS') {
+	    $value = [$value] unless ref $value eq 'ARRAY';
+	    push @{$o->{ILSM}{MAKEFILE}{LIBS}}, '';
+	    my $num = scalar @{$o->{ILSM}{MAKEFILE}{LIBS}} - 1;
+	    $o->{ILSM}{MAKEFILE}{LIBS}[$num] .= ' ' . $_
+	      for (@$value);
 	    next;
 	}
-	if ($key eq 'TYPEMAPS') {
-            croak "TYPEMAPS file '$value' not found"
-              unless -f $value;
-            my ($path, $file) = ($value =~ m|^(.*)[/\\](.*)$|) ?
-              ($1, $2) : ('.', $value);
-            $value = abs_path($path) . '/' . $file;
-            add_list($o->{CPP}{MAKEFILE}, $key, $value, []);
-            next;
-	}
-	if ($key eq 'AUTO_INCLUDE') {
-	    add_list($o->{CPP}, $key, $value, '');
+	if ($key eq 'PRESERVE_ELLIPSIS') {
+	    croak "Argument to PRESERVE_ELLIPSIS must be numeric" 
+	      unless $value =~ /^\d+$/;
+	    $o->{ILSM}{PRESERVE_ELLIPSIS} = $value;
 	    next;
 	}
-	if ($key eq 'BOOT') {
-	    add_text($o->{CPP}{XS}, $key, $value, '');
-	    next;
-	}
-	if ($key eq 'PREFIX') {
-	    croak "Invalid value for 'PREFIX' option"
-	      unless ($value =~ /^\w*$/ and
-		      $value !~ /\n/);
-	    $o->{CPP}{XS}{PREFIX} = $value;
-	    next;
-	}
-	croak "$key is not a valid config option for C++\n";
+	push @propagate, $key, $value;
     }
-}
 
-sub add_list {
-    my ($ref, $key, $value, $default) = @_;
-    $value = [$value] unless ref $value;
-    croak usage_validate($key) unless ref($value) eq 'ARRAY';
-    for (@$value) {
-	if (defined $_) {
-	    push @{$ref->{$key}}, $_;
-	}
-	else {
-	    $ref->{$key} = $default;
-	}
-    }
-}
-
-sub add_string {
-    my ($ref, $key, $value, $default) = @_;
-    $value = [$value] unless ref $value;
-    croak usage_validate($key) unless ref($value) eq 'ARRAY';
-    for (@$value) {
-	if (defined $_) {
-	    $ref->{$key} .= ' ' . $_;
-	}
-	else {
-	    $ref->{$key} = $default;
-	}
-    }
-}
-
-sub add_text {
-    my ($ref, $key, $value, $default) = @_;
-    $value = [$value] unless ref $value;
-    croak usage_validate($key) unless ref($value) eq 'ARRAY';
-    for (@$value) {
-	if (defined $_) {
-	    chomp;
-	    $ref->{$key} .= $_ . "\n";
-	}
-	else {
-	    $ref->{$key} = $default;
-	}
-    }
-}
-
-#==============================================================================
-# Parse and compile C++ code
-#==============================================================================
-sub build {
-    my $o = shift;
-    $o->parse;
-    $o->write_XS;
-    $o->write_typemap;
-    $o->write_Inline_headers;
-    $o->write_Makefile_PL;
-    $o->compile;
+    $o->SUPER::validate(@propagate) if @propagate;
 }
 
 #============================================================================
@@ -165,180 +102,78 @@ sub info {
     my $info = "";
 
     $o->parse unless $o->{parser};
+    my $data = $o->{parser}{data};
 
-    my $parser = $o->{parser};
-    my $data = $parser->{data};    
-    
-    print Dumper $o->{parser}->{data};
-    
-    if (defined $o->{parser}->{data}->{classes}) {
-        $info .= "The following C++ classes have been bound to Perl:\n";
+    if (defined $o->{parser}{data}{classes}) {
+	$info .= "The following C++ classes have been bound to Perl:\n";
 	for my $class (sort @{$data->{classes}}) {
-	    $info .= "\t$class\n";
-	    for my $thing (sort @{$data->{class}->{$class}}) {
-	    	my ($name, $scope, $type) = @{$thing}{qw(name scope thing)};
+	    my @parents = grep { $_->{thing} eq 'inherits' }
+	      @{$data->{class}{$class}};
+	    $info .= "\tclass $class";
+	    $info .= (" : " 
+		      . join (', ', 
+			      map { $_->{scope} . " " . $_->{name} } @parents)
+		     ) if @parents;
+	    $info .= " {\n";
+	    for my $thing (sort { $a->{name} <=> $b->{name} } 
+			   @{$data->{class}{$class}}) {
+		my ($name, $scope, $type) = @{$thing}{qw(name scope thing)};
 		next unless $scope eq 'public' and $type eq 'method';
 		my $rtype = $thing->{rtype} || "";
 		$info .= "\t\t$rtype" . ($rtype ? " " : "");
 		$info .= $class . "::$name(";
-		$info .= join ', ', (map "$_->{type} $_->{name}", 
-				      @{$thing->{args}});
-		$info .= ")\n";
+		my @args = grep { $_->{name} ne '...' } @{$thing->{args}};
+		my $ellipsis = (scalar @{$thing->{args}} - scalar @args) != 0;
+		$info .= join ', ', (map "$_->{type} $_->{name}", @args), 
+		  $ellipsis ? "..." : ();
+		$info .= ");\n";
 	    }
+	    $info .= "\t};\n"
 	}
 	$info .= "\n";
     }
     else {
         $info .= "No C++ classes have been successfully bound to Perl.\n\n";
     }
-    if (defined $o->{parser}->{data}->{functions}) {
-	$info .= "The following public C++ functions have been bound to Perl:\n";
+    if (defined $o->{parser}{data}{functions}) {
+	$info .= "The following C++ functions have been bound to Perl:\n";
 	for my $function (sort @{$data->{functions}}) {
-	    next if $function =~ /::/; # Even though this is caught in Grammar.
-	    my $return_type = $data->{function}->{$function}->{return_type}||"";
-	    my @arg_names = @{$data->{function}->{$function}->{arg_names}||[]};
-	    my @arg_types = @{$data->{function}->{$function}->{arg_types}||[]};
-	    my @args = map {$_ . ' ' . shift @arg_names} @arg_types;
-	    $info .= ("\t" .
-		      ($return_type 
-		       ? "$return_type $function(" . join(', ', @args) . ")"
-		       : "$function(" . join(', ', @args) .  ")") .
-		      "\n");
+	    my $func = $data->{function}{$function};
+	    $info .= "\t" . $func->{rtype} . " ";
+	    $info .= $func->{name} . "(";
+	    my @args = grep { $_->{name} ne '...' } @{$func->{args}};
+	    my $ellipsis = (scalar @{$func->{args}} - scalar @args) != 0;
+	    $info .= join ', ', (map "$_->{type} $_->{name}", @args), 
+	      $ellipsis ? "..." : ();
+	    $info .= ");\n";
 	}
 	$info .= "\n";
     }
     else {
-	$info .= "No public C++ functions have been bound to Perl.\n\n";
+	$info .= "No C++ functions have been bound to Perl.\n\n";
     }
+    $info .= Inline::Struct::info($o) if $o->{STRUCT}{'.any'};
     return $info;
 }
 
 sub parse {
     my $o = shift;
     return if $o->{parser};
-    my $grammar = Inline::CPP::Grammar::grammar()
+    my $grammar = Inline::CPP::grammar::grammar()
       or croak "Can't find C++ grammar\n";
     $o->get_maps;
     $o->get_types;
 
     $::RD_HINT++;
+    require Parse::RecDescent;
     my $parser = $o->{parser} = Parse::RecDescent->new($grammar);
+    $parser->{data}{typeconv} = $o->{typeconv};
+    $parser->{ILSM} = $o->{ILSM}; # give parser access to config options
 
-    $parser->code($o->{code})
+    $o->{ILSM}{code} = $o->filter(@{$o->{ILSM}{FILTERS}});
+    Inline::Struct::parse($o) if $o->{STRUCT}{'.any'};
+    $parser->code($o->{ILSM}{code})
       or croak "Bad C++ code passed to Inline at @{[caller(2)]}\n";
-}
-
-sub get_maps {
-    my $o = shift;
-
-    my $typemap = '';
-    $typemap = "$Config::Config{installprivlib}/ExtUtils/typemap"
-      if -f "$Config::Config{installprivlib}/ExtUtils/typemap";
-    $typemap = "$Config::Config{privlibexp}/ExtUtils/typemap"
-      if (not $typemap and -f "$Config::Config{privlibexp}/ExtUtils/typemap");
-    warn "Can't find the default system typemap file"
-      if (not $typemap and $^W);
-
-    unshift @{$o->{CPP}{MAKEFILE}{TYPEMAPS}}, $typemap if $typemap;
-
-    if (-f "$FindBin::Bin/typemap") {
-	push @{$o->{CPP}{MAKEFILE}{TYPEMAPS}}, "$FindBin::Bin/typemap";
-    }
-}
-
-#============================================================================
-# This routine parses XS typemap files to get a list of valid types to create
-# bindings to. This code is mostly hacked out of Larry Wall's xsubpp program.
-#============================================================================
-sub get_types {
-    my (%type_kind, %proto_letter, %input_expr, %output_expr);
-    my $o = shift;
-
-    my $proto_re = "[" . quotemeta('\$%&*@;') . "]";
-    foreach my $typemap (@{$o->{CPP}{MAKEFILE}{TYPEMAPS}}) {
-	next unless -e $typemap;
-	# skip directories, binary files etc.
-	warn("Warning: ignoring non-text typemap file '$typemap'\n"), next 
-	  unless -T $typemap;
-	open(TYPEMAP, $typemap) 
-	  or warn ("Warning: could not open typemap file '$typemap': $!\n"), next;
-	my $mode = 'Typemap';
-	my $junk = "";
-	my $current = \$junk;
-	while (<TYPEMAP>) {
-	    next if /^\s*\#/;
-	    my $line_no = $. + 1; 
-	    if (/^INPUT\s*$/)   {$mode = 'Input';   $current = \$junk;  next}
-	    if (/^OUTPUT\s*$/)  {$mode = 'Output';  $current = \$junk;  next}
-	    if (/^TYPEMAP\s*$/) {$mode = 'Typemap'; $current = \$junk;  next}
-	    if ($mode eq 'Typemap') {
-		chomp;
-		my $line = $_;
-		TrimWhitespace($_);
-		# skip blank lines and comment lines
-		next if /^$/ or /^\#/;
-		my ($type,$kind, $proto) = 
-		  /^\s*(.*?\S)\s+(\S+)\s*($proto_re*)\s*$/ or
-		    warn("Warning: File '$typemap' Line $. '$line' TYPEMAP entry needs 2 or 3 columns\n"), next;
-		$type = TidyType($type);
-		$type_kind{$type} = $kind;
-		# prototype defaults to '$'
-		$proto = "\$" unless $proto;
-		warn("Warning: File '$typemap' Line $. '$line' Invalid prototype '$proto'\n") 
-		  unless ValidProtoString($proto);
-		$proto_letter{$type} = C_string($proto);
-	    }
-	    elsif (/^\s/) {
-		$$current .= $_;
-	    }
-	    elsif ($mode eq 'Input') {
-		s/\s+$//;
-		$input_expr{$_} = '';
-		$current = \$input_expr{$_};
-	    }
-	    else {
-		s/\s+$//;
-		$output_expr{$_} = '';
-		$current = \$output_expr{$_};
-	    }
-	}
-	close(TYPEMAP);
-    }
-
-    %Inline::CPP::valid_types = 
-      map {($_, 1)}
-    grep {defined $input_expr{$type_kind{$_}}}
-    keys %type_kind;
-
-    %Inline::CPP::valid_rtypes = 
-      map {($_, 1)}
-    grep {defined $output_expr{$type_kind{$_}}}
-    keys %type_kind;
-    $Inline::CPP::valid_rtypes{void} = 1;
-}
-
-sub ValidProtoString ($) {
-    my $string = shift;
-    my $proto_re = "[" . quotemeta('\$%&*@;') . "]";
-    return ($string =~ /^$proto_re+$/) ? $string : 0;
-}
-
-sub TrimWhitespace {
-    $_[0] =~ s/^\s+|\s+$//go;
-}
-
-sub TidyType {
-    local $_ = shift;
-    s|\s*(\*+)\s*|$1|g;
-    s|(\*+)| $1 |g;
-    s|\s+| |g;
-    TrimWhitespace($_);
-    $_;
-}
-
-sub C_string ($) {
-    (my $string = shift) =~ s|\\|\\\\|g;
-    $string;
 }
 
 sub write_XS {
@@ -350,338 +185,279 @@ sub write_XS {
       or croak $!;
 
     print XS <<END;
-$o->{CPP}{AUTO_INCLUDE}
-$o->{code}
-
+$o->{ILSM}{AUTO_INCLUDE}
+$o->{STRUCT}{'.macros'}
+$o->{ILSM}{code}
+$o->{STRUCT}{'.xs'}
 END
 
-    my $parser = $o->{parser};
-    my $data = $parser->{data};
+    my $data = $o->{parser}{data};
+
+    warn("Warning: No Inline C++ functions or classes bound to Perl\n" .
+	 "Check your C++ for Inline compatibility.\n\n")
+      if ((not defined $data->{classes}) 
+	  and (not defined $data->{functions})
+	  and ($^W));
 
     for my $class (@{$data->{classes}}) {
-
-#      print "writing prototypes for class $class\n";
-
-	my $thing = $pkg . "::$class";
+	my $proper_pkg = $pkg . "::$class";
 	# Set up the proper namespace
 	print XS <<END;
-MODULE = $module     	PACKAGE = $thing
+MODULE = $module     	PACKAGE = $proper_pkg
 
 PROTOTYPES: DISABLE
 
 END
 
-	# Write out the class prototypes, renaming the constructor
-	# and destructor to new() and DESTROY()
-	
-	for my $thing (@{$data->{class}->{$class}}) {
+	my ($ctor, $dtor, $abstract) = (0, 0, 0);
+	for my $thing (@{$data->{class}{$class}}) {
 	    my ($name, $scope, $type) = @{$thing}{qw|name scope thing|};
-	    #   print "name: $name\nscope: $scope\ntype: $type\n";
-	    #   print "class: $class\n";
-	    next unless ($scope eq 'public' and $type eq 'method');
-	    if ($name eq $class) {
-		#	       print "Constructor!\n";
-		print XS $class, " *\n", $class, "::new";
-	    } elsif ($name eq "~$class") {
-		#	       print "Destructor!\n";
-		print XS "void\n$class", "::DESTROY";
-	    } else {
-		#	       print "Method!\n";
-		print XS "$thing->{rtype}\n$class", "::$thing->{name} ";
-	    }
-	    print XS ("(", 
-		      (join ", ", map {$_->{name}} @{$thing->{args}}),
-		      ")\n",
-		     );
-	
-	    for my $arg (@{$thing->{args}}) {
-		print XS "\t$arg->{type}\t$arg->{name}\n";
+
+	    # Let Perl handle inheritance
+	    if ($type eq 'inherits' and $scope eq 'public') {
+		$o->{ILSM}{XS}{BOOT} ||= '';
+		my $ISA_name = "${pkg}::${class}::ISA";
+		my $parent = "${pkg}::${name}";
+		$o->{ILSM}{XS}{BOOT} .= <<END;
+{
+#ifndef get_av
+    AV *isa = perl_get_av("$ISA_name", 1);
+#else
+    AV *isa = get_av("$ISA_name", 1);
+#endif
+    av_push(isa, newSVpv("$parent", 0));
+}
+END
 	    }
 
-	    print XS "\n";
-	
+	    # Get/set methods will go here:
+
+	    # Cases we skip:
+            $abstract ||= ($type eq 'method' and $thing->{abstract});
+	    next if ($type eq 'method' and $thing->{abstract});
+	    next unless ($scope eq 'public' and $type eq 'method');
+
+	    # generate an XS wrapper
+	    $ctor ||= ($name eq $class);
+	    $dtor ||= ($name eq "~$class");
+	    print XS $o->generate_XS($thing, $name, $class);
 	}
+
+	# Provide default constructor and destructor:
+	print XS <<END unless ($ctor or $abstract);
+$class *
+${class}::new()
+
+END
+	print XS <<END unless ($dtor or $abstract);
+void
+${class}::DESTROY()
+
+END
     }
 
-  print XS <<END;
-MODULE = $module     	PACKAGE = $pkg
+    my $prefix = (($o->{ILSM}{XS}{PREFIX}) ?
+		  "PREFIX = $o->{ILSM}{XS}{PREFIX}" :
+		  '');
+    print XS <<END;
+MODULE = $module     	PACKAGE = $pkg	$prefix
 
 PROTOTYPES: DISABLE
 
 END
 
     for my $function (@{$data->{functions}}) {
-	next if $function =~ /::/;
-	my $return_type = $data->{function}->{$function}->{return_type};
-	my @arg_names = @{$data->{function}->{$function}->{arg_names}||[]};
-	my @arg_types = @{$data->{function}->{$function}->{arg_types}||[]};
-	
-	print XS ("\n$return_type\n$function (",
-		  join(', ', @arg_names), ")\n");
-	
-	for my $arg_name (@arg_names) {
-	    my $arg_type = shift @arg_types;
-	    last if $arg_type eq '...';
-	    print XS "\t$arg_type\t$arg_name\n";
-	}
-	
-	my $listargs = '';
-	$listargs = pop @arg_names if (@arg_names and
-				       $arg_names [-1] eq '...');
-	my $arg_name_list = join(', ', @arg_names);
-	
-	if ($return_type eq 'void') {
-	    print XS <<END;
-    PREINIT:
-    I32* temp;
-    PPCODE:
-    temp = PL_markstack_ptr++;
-    $function($arg_name_list);
-      if (PL_markstack_ptr != temp) {
-	/* truly void, because dXSARGS not invoked */
-	PL_markstack_ptr = temp;
-	XSRETURN_UNDEF;
-      }
-      /* must have used dXSARGS; list context implied */
-      return; /* assume stack size is correct */
-END
-	}
-	elsif ($listargs) {
-	    print XS <<END;
-      PREINIT:
-      I32* temp;
-      CODE:
-      temp = PL_markstack_ptr++;
-      RETVAL = $function($arg_name_list);
-      PL_markstack_ptr = temp;
-      OUTPUT:
-      RETVAL
-END
-	}
+	next if $data->{function}{$function}{rtype} =~ 'static'; # special case
+	print XS $o->generate_XS($data->{function}{$function}, $function);
     }
 
-    if (defined $o->{CPP}{XS}{BOOT} and
-	$o->{CPP}{XS}{BOOT}) {
+    if (defined $o->{ILSM}{XS}{BOOT} and
+	$o->{ILSM}{XS}{BOOT}) {
 	print XS <<END;
 BOOT:
-$o->{CPP}{XS}{BOOT}
+$o->{ILSM}{XS}{BOOT}
 END
     }
 
     close XS;
+    $o->write_typemap;
+}
+
+sub generate_XS {
+    my $o = shift;
+    my $thing = shift;
+    my $name = shift;
+    my $class = shift || "";
+
+    my ($XS, $PREINIT, $CODE) = ("", "", "");
+    my ($ctor, $dtor) = (0, 0);
+
+    if ($name eq $class) {
+	$XS .= $class . " *\n" . $class . "::new";
+	$ctor = 1;
+    }
+    elsif ($name eq "~$class") {
+	$XS .= "void\n$class" . "::DESTROY";
+	$dtor = 1;
+    }
+    elsif ($class) {
+	$XS .= "$thing->{rtype}\n$class" . "::$thing->{name}";
+    }
+    else {
+	$XS .= "$thing->{rtype}\n$thing->{name}";
+    }
+
+    my (@args, @opts, $ellipsis, $void);
+    $_->{optional} ? push@opts,$_ : push@args,$_ for @{$thing->{args}};
+    $ellipsis = pop @args if (@args and $args[-1]->{name} eq '...');
+    $void = ($thing->{rtype} and $thing->{rtype} eq 'void');
+    $XS .= join '', 
+	     ("(", 
+	      (join ", ", (map {$_->{name}} @args), 
+	         (scalar @opts or $ellipsis) ? '...' : ()),
+	      ")\n",
+	     );
+
+    for my $arg (@args) {
+	$XS .= "\t$arg->{type}\t$arg->{name}\n";
+    }
+    if ($void or $ellipsis) {
+	$PREINIT .= "\tI32 *\t__temp_markstack_ptr;\n";
+	$CODE .= "\t__temp_markstack_ptr = PL_markstack_ptr++;\n";
+    }
+
+    if (@opts) {
+	$PREINIT .= "\t$_->{type}\t$_->{name};\n" for @opts;
+	$CODE .= "switch(items" . ($class ? '-1' : '') . ") {\n";
+
+	my $offset = scalar @args; # which is the first optional?
+	my $total = $offset + scalar @opts;
+	for (my $i=$offset; $i<$total; $i++) {
+	    $CODE .= "case " . ($i+1) . ":\n";
+	    my @tmp;
+	    for (my $j=$offset; $j<=$i; $j++) {
+		my $targ = $opts[$j-$offset]->{name};
+		my $type = $opts[$j-$offset]->{type};
+		my $src  = "ST($j)";
+		$CODE .= $o->typeconv($targ,$src,$type,'input_expr')
+		  . ";\n";
+		push @tmp, $targ;
+	    }
+	    $CODE .= "\t";
+	    $CODE .= "RETVAL = "
+	      unless $void;
+	    my $rval = '';
+	    $rval .= "new " if $ctor;
+	    $rval .= "delete " if $dtor;
+	    $rval .= "THIS->" if (length($class) and not ($ctor or $dtor));
+	    $rval .= join '', "$name(", 
+	      join (',', (map{$_->{name}}@args), @tmp), ")";
+	    $CODE .= $o->const_cast($thing, $rval) . ";\n";
+	    $CODE .= "\tbreak; /* case " . ($i+1) . " */\n";
+	}
+	$CODE .= "default:\n";
+	$CODE .= "\tRETVAL = "
+	  unless $void;
+	my $rval = '';
+	$rval .= "new " if $ctor;
+	$rval .= "delete " if $dtor;
+	$rval .= "THIS->" if ($class and not ($ctor or $dtor));
+	$rval .= join '', "$name(", 
+	  join (',', map{$_->{name}}@args), ")";
+	$CODE .= $o->const_cast($thing, $rval) . ";\n";
+	$CODE .= "} /* switch(items) */ \n";
+    }
+    elsif ($void) {
+	$CODE .= "\t";
+	$CODE .= "new " if $ctor;
+	$CODE .= "delete " if $dtor;
+	$CODE .= "THIS->" if ($class and not ($ctor or $dtor));
+	$CODE .= join '', "$name(", 
+	  join (',', map{$_->{name}}@args), ");\n";
+    }
+    elsif ($ellipsis or $thing->{rconst}) {
+	$CODE .= "\t";
+	$CODE .= "RETVAL = ";
+	my $rval = '';
+	$rval .= "new " if $ctor;
+	$rval .= "delete " if $dtor;
+	$rval .= "THIS->" if ($class and not ($ctor or $dtor));
+	$rval .= join '', "$name(",
+	  join (',', map{$_->{name}}@args), ")";
+	$CODE .= $o->const_cast($thing, $rval) . ";\n";
+    }
+    if ($void) {
+	$CODE .= <<'END';
+        if (PL_markstack_ptr != __temp_markstack_ptr) {
+          /* truly void, because dXSARGS not invoked */
+          PL_markstack_ptr = __temp_markstack_ptr;
+          XSRETURN_EMPTY; /* return empty stack */
+        }
+        /* must have used dXSARGS; list context implied */
+        return; /* assume stack size is correct */
+END
+    }
+    elsif ($ellipsis) {
+	$CODE .= "\tPL_markstack_ptr = __temp_markstack_ptr;\n";
+    }
+
+    # The actual function:
+    $XS .= "PREINIT:\n$PREINIT" if length $PREINIT;
+    $XS .= "PP" if $void;
+    $XS .= "CODE:\n$CODE" if length $CODE;
+    $XS .= "OUTPUT:\nRETVAL\n" 
+      if (length $CODE and not $void);
+    $XS .= "\n";
+    return $XS;
+}
+
+sub const_cast {
+    my $o = shift;
+    my $thing = shift;
+    my $value = shift;
+    return ($thing->{rconst}
+	    ? "const_cast<$thing->{rtype}>($value)"
+	    : $value);
 }
 
 sub write_typemap {
     my $o = shift;
-
-    open TYPEMAP, "> $o->{build_dir}/typemap"
+    my $filename = "$o->{build_dir}/CPP.map";
+    my $type_kind = $o->{typeconv}{type_kind};
+    my $typemap = "";
+    $typemap .= $_ . "\t"x2 . $TYPEMAP_KIND . "\n" 
+      for grep { $type_kind->{$_} eq $TYPEMAP_KIND } keys %$type_kind;
+    return unless length $typemap;
+    open TYPEMAP, "> $filename"
       or croak $!;
-    print TYPEMAP "TYPEMAP\n";
-#    map {print "$_ *\tO_OBJECT\n"} @{$o->{parser}{data}{classes}};
-    for my $cls (@{$o->{parser}{data}{classes}}) {
-	print TYPEMAP "$cls *\t\tO_OBJECT\n";
-    }
-    print TYPEMAP <<'END';
-
+    print TYPEMAP <<END;
+TYPEMAP
+$typemap
 OUTPUT
-O_OBJECT
-   sv_setref_pv( $arg, CLASS, (void*)$var );
-
+$TYPEMAP_KIND
+$o->{typeconv}{output_expr}{$TYPEMAP_KIND}
 INPUT
-O_OBJECT
-   if( sv_isobject($arg) && (SvTYPE(SvRV($arg)) == SVt_PVMG))
-     $var = ($type)SvIV((SV*)SvRV( $arg ));
-   else {
-       warn ( \"${Package}::$func_name() -- $var is not a blessed SV reference\" );
-       XSRETURN_UNDEF;
-   }
-
+$TYPEMAP_KIND
+$o->{typeconv}{input_expr}{$TYPEMAP_KIND}
 END
     close TYPEMAP;
+    $o->validate( TYPEMAPS => $filename );
 }
 
-#==============================================================================
-# Generate the INLINE.h file.
-#==============================================================================
-sub write_Inline_headers {
-    use strict;
+# Generate type conversion code: perl2c or c2perl.
+sub typeconv {
     my $o = shift;
-
-    open HEADER, "> $o->{build_dir}/INLINE.h"
-      or croak;
-
-    print HEADER <<'END';
-#define Inline_Stack_Vars	dXSARGS
-#define Inline_Stack_Items      items
-#define Inline_Stack_Item(x)	ST(x)
-#define Inline_Stack_Reset      sp = mark
-#define Inline_Stack_Push(x)	XPUSHs(x)
-#define Inline_Stack_Done	PUTBACK
-#define Inline_Stack_Return(x)	XSRETURN(x)
-#define Inline_Stack_Void       XSRETURN(0)
-
-#define INLINE_STACK_VARS	Inline_Stack_Vars
-#define INLINE_STACK_ITEMS	Inline_Stack_Items
-#define INLINE_STACK_ITEM(x)	Inline_Stack_Item(x)
-#define INLINE_STACK_RESET	Inline_Stack_Reset
-#define INLINE_STACK_PUSH(x)    Inline_Stack_Push(x)
-#define INLINE_STACK_DONE	Inline_Stack_Done
-#define INLINE_STACK_RETURN(x)	Inline_Stack_Return(x)
-#define INLINE_STACK_VOID	Inline_Stack_Void
-
-#define inline_stack_vars	Inline_Stack_Vars
-#define inline_stack_items	Inline_Stack_Items
-#define inline_stack_item(x)	Inline_Stack_Item(x)
-#define inline_stack_reset	Inline_Stack_Reset
-#define inline_stack_push(x)    Inline_Stack_Push(x)
-#define inline_stack_done	Inline_Stack_Done
-#define inline_stack_return(x)	Inline_Stack_Return(x)
-#define inline_stack_void	Inline_Stack_Void
-END
-
-    close HEADER;
-}
-#==============================================================================
-# Generate the Makefile.PL
-#==============================================================================
-sub write_Makefile_PL {
-    use strict;
-    use Data::Dumper;
-
-    my $o = shift;
-    my %options = (
-		   VERSION => '0.00',
-		   %{$o->{CPP}{MAKEFILE}},
-		   NAME => $o->{module},
-		  );
-
-    open MF, "> $o->{build_dir}/Makefile.PL"
-      or croak;
-
-    print MF <<END;
-use ExtUtils::MakeMaker;
-my %options = %\{
-END
-
-    local $Data::Dumper::Terse = 1;
-    local $Data::Dumper::Indent = 1;
-    print MF Data::Dumper::Dumper(\ %options);
-
-    print MF <<END;
-\};
-WriteMakefile(\%options);
-END
-    close MF;
-}
-
-#==============================================================================
-# Run the build process.
-#==============================================================================
-sub compile {
-    use strict;
-    use Cwd;
-    my ($o, $perl, $make, $cmd, $cwd);
-    $o = shift;
-     my ($module, $modpname, $modfname, $build_dir, $install_lib) = 
-      @{$o}{qw(module modpname modfname build_dir install_lib)};
-
-    -f ($perl = $Config::Config{perlpath})
-      or croak "Can't locate your perl binary";
-    $make = $o->{CPP}{MAKE} || $Config::Config{make}
-      or croak "Can't locate your make binary";
-    $cwd = &cwd;
-    for $cmd ("$perl Makefile.PL > out.Makefile_PL 2>&1",
-	      \ &fix_make,   # Fix Makefile problems
-	      "$make > out.make 2>&1",
-	      "$make install > out.make_install 2>&1",
-	     ) {
-	if (ref $cmd) {
-	    $o->$cmd();
-	}
-	else {
-	    chdir $build_dir;
-	    system($cmd) and croak <<END;
-
-A problem was encountered while attempting to compile and install your Inline
-$o->{language} code. The command that failed was:
-  $cmd
-
-The build directory was:
-$build_dir
-
-To debug the problem, cd to the build directory, and inspect the output files.
-
-END
-	    chdir $cwd;
-	}
-    }
-
-    if ($o->{config}{CLEAN_AFTER_BUILD} and
-	not $o->{config}{REPORTBUG}
-       ) {
-	$o->rmpath($o->{config}{BLIB_I}, $modpname);
-	unlink "$install_lib/auto/$modpname/.packlist";
-	unlink "$install_lib/auto/$modpname/$modfname.bs";
-	unlink "$install_lib/auto/$modpname/$modfname.exp"; #MSWin32 VC++
-	unlink "$install_lib/auto/$modpname/$modfname.lib"; #MSWin32 VC++
-    }
-}
-
-#==============================================================================
-# This routine fixes problems with the MakeMaker Makefile.
-# Yes, it is a kludge, but it is a necessary one.
-#
-# ExtUtils::MakeMaker cannot be trusted. It has extremely flaky behaviour
-# between releases and platforms. I have been burned several times.
-#
-# Doing this actually cleans up other code that was trying to guess what
-# MM would do. This method will always work.
-# And, at least this only needs to happen at build time, when we are taking 
-# a performance hit anyway!
-#==============================================================================
-my %fixes = (
-	     INSTALLSITEARCH => 'install_lib',
-	     INSTALLDIRS => 'installdirs',
-	    );
-
-my %regex_fixes =
-  (
-   CCFLAGS => ['-Dbool=char', ''],
-  );
-
-sub fix_make {
-    use strict;
-    my (@lines, $fix);
-    my $o = shift;
-
-    $o->{installdirs} = 'site';
-
-    open(MAKEFILE, "< $o->{build_dir}Makefile")
-      or croak "Can't open Makefile for input: $!\n";
-    @lines = <MAKEFILE>;
-    close MAKEFILE;
-
-    open(MAKEFILE, "> $o->{build_dir}Makefile")
-      or croak "Can't open Makefile for output: $!\n";
-    for (@lines) {
-	if (/^(\w+)\s*=\s*\S*\s*$/ and
-	    $fix = $fixes{$1}
-	   ) {
-	    print MAKEFILE "$1 = $o->{$fix}\n"
-	}
-	elsif (/^(\w+)\s*=\s*([^\n]*)$/ and
-	       $fix = $regex_fixes{$1}
-	      ) {
-	    my $orig = $1;
-	    my $val = $2;
-	    $val =~ s|$fix->[0]|$fix->[1]|;
-	    print MAKEFILE "$orig = $val\n";
-	}
-	else {
-	    print MAKEFILE;
-	}
-    }
-    close MAKEFILE;
+    my $var = shift;
+    my $arg = shift;
+    my $type = shift;
+    my $dir = shift;
+    my $preproc = shift;
+    my $tkind = $o->{typeconv}{type_kind}{$type};
+    my $ret =
+      eval qq{qq{$o->{typeconv}{$dir}{$tkind}}};
+    chomp $ret;
+    $ret =~ s/\n/\\\n/g if $preproc;
+    return $ret;
 }
 
 1;

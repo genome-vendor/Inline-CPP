@@ -1,5 +1,29 @@
 Revision history for Perl extension Inline::CPP.
 
+0.20  Wed May  2 23:00:50 PDT 2001
+	- Made Inline::CPP a subclass of Inline::C. Moved most functionality
+	  into Inline::C, and trimmed code a lot.
+	- Fixed bug in handling of 'LIBS' config option. Added a 'ALTLIBS'
+	  config option which adds a new element to the list of alternate
+	  libs.
+	- Added 'PRESERVE_ELLIPSIS' option, which prevents Inline::CPP from
+	  replacing '...' arguments with nothing.
+	- Inline::CPP now works on Cygwin!
+	- Grammar improvements:
+		- Inline functions
+		- Inheritance
+		- Default parameters: void foo(int a=10, char *b="Hello");
+		- Unnamed parameters: void foo(int, char *);
+		- Support for public, private and protected scopes
+		- 'structs' are now bound just like classes, except the
+		  default scope is public.
+		- Support for no fixed arguments: void foo(...);
+
+0.14  Tue Mar 13 23:10:14 PST 2001
+	- Moved the distribution module from CPP_pm to CPP.pm to get 
+	  Inline::CPP indexed properly.
+	- Fixed some minor bugs.
+
 0.13  Sun Mar  4 22:09:35 PST 2001
 	- Added Win32-specific configuration code to add '-TP' flag to compiler
 	- Special case for AIX ($Config{so})
