@@ -8,10 +8,10 @@ DOWN:	Perl Version
 CELLS:	PASS|FAIL(tester's initials)
 
 #============================================================================
-	Linux/Alpha/GCC	Linux/x86/GCC	OpenBSD/x86/GCC
-5.005	PASS(nw)	PASS(nw)	
-5.6.0	PASS(nw)	PASS(nw)	
-5.6.1	PASS(nw)			
+	Linux/Alpha/GCC	Linux/x86/GCC	OpenBSD/x86/GCC	Linux/PPC/GCC
+5.005	PASS(nw)	PASS(nw)			
+5.6.0	PASS(nw)	PASS(nw)			
+5.6.1	PASS(nw)					PASS(sor)
 5.7.0	PASS(nw)			
 5.7.1	PASS(nw)			
 AP623	PASS(nw)
@@ -21,6 +21,12 @@ AP626	PASS(nw)
 5.005					PASS(nw)	PASS(nw)
 5.6.0					
 5.6.1					
+5.7.0					
+#============================================================================
+	Sun5.7/GCC	Sun5.7/Sun	Sun5.8/GCC	Sun5.8/Sun
+5.005					
+5.6.0					
+5.6.1							PASS(dsb)
 5.7.0					
 #============================================================================
 	HPUX11/GCC	HPUX11/HP	HPUX10.20/GCC	HPUX10.20/HP
@@ -76,4 +82,5 @@ Who are the testing people?
 nw	Neil Watkiss	NEILW@cpan.org
 bi	Brian Ingerson	INGY@cpan.org
 ks	Ken Simpson	KenS@ActiveState.com
-
+dsb	David Boyce	dsb@world.std.com
+sor	Sean O'Rourke	educated_foo@yahoo.com

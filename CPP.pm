@@ -8,7 +8,7 @@ use Carp;
 use vars qw(@ISA $VERSION);
 
 @ISA = qw(Inline::C);
-$VERSION = "0.23";
+$VERSION = '0.24';
 my $TYPEMAP_KIND = $Inline::CPP::grammar::TYPEMAP_KIND;
 
 #============================================================================
@@ -18,7 +18,7 @@ sub register {
     use Config;
     return {
 	    language => 'CPP',
-	    aliases => ['cpp', 'C++', 'c++', 'Cplusplus', 'cplusplus'],
+	    aliases => ['cpp', 'C++', 'c++', 'Cplusplus', 'cplusplus', 'CXX', 'cxx'],
 	    type => 'compiled',
 	    suffix => $Config{dlext},
 	   };
@@ -44,20 +44,17 @@ sub validate {
 #ifndef bool
 #include <%iostream%>
 #endif
-#ifdef __CYGWIN__
 extern "C" {
-#endif
 #include "EXTERN.h"
 #include "perl.h"
 #include "XSUB.h"
 #include "INLINE.h"
-#ifdef __CYGWIN__
 }
-#endif
 #ifdef bool
 #undef bool
 #include <%iostream%>
 #endif
+
 END
     $o->{ILSM}{PRESERVE_ELLIPSIS} = 0 
       unless defined $o->{ILSM}{PRESERVE_ELLIPSIS};
@@ -93,8 +90,7 @@ END
 
     # Replace %iostream% with the correct iostream library
     my $iostream = "iostream";
-    $iostream .= ".h" unless (defined $o->{ILSM}{STD_IOSTREAM} and 
-			      $o->{ILSM}{STD_IOSTREAM});
+    $iostream .= ".h" unless $o->{ILSM}{STD_IOSTREAM};
     $o->{ILSM}{AUTO_INCLUDE} =~ s|%iostream%|$iostream|g;
 
     # Forward all unknown requests up to Inline::C
@@ -111,53 +107,60 @@ sub info {
     $o->parse unless $o->{ILSM}{parser};
     my $data = $o->{ILSM}{parser}{data};
 
-    if (defined $o->{ILSM}{parser}{data}{classes}) {
-	$info .= "The following C++ classes have been bound to Perl:\n";
+    my (@class, @func);
+    if (defined $data->{classes}) {
 	for my $class (sort @{$data->{classes}}) {
 	    my @parents = grep { $_->{thing} eq 'inherits' }
 	      @{$data->{class}{$class}};
-	    $info .= "\tclass $class";
-	    $info .= (" : " 
+	    push @class, "\tclass $class";
+	    push @class, (" : " 
 		      . join (', ', 
 			      map { $_->{scope} . " " . $_->{name} } @parents)
 		     ) if @parents;
-	    $info .= " {\n";
+	    push @class, " {\n";
 	    for my $thing (sort { $a->{name} cmp $b->{name} } 
 			   @{$data->{class}{$class}}) {
 		my ($name, $scope, $type) = @{$thing}{qw(name scope thing)};
 		next unless $scope eq 'public' and $type eq 'method';
+		next unless $o->check_type(
+		    $thing,
+		    $name eq $class,
+		    $name eq "~$class",
+		);
 		my $rtype = $thing->{rtype} || "";
-		$info .= "\t\t$rtype" . ($rtype ? " " : "");
-		$info .= $class . "::$name(";
+		push @class, "\t\t$rtype" . ($rtype ? " " : "");
+		push @class, $class . "::$name(";
 		my @args = grep { $_->{name} ne '...' } @{$thing->{args}};
 		my $ellipsis = (scalar @{$thing->{args}} - scalar @args) != 0;
-		$info .= join ', ', (map "$_->{type} $_->{name}", @args), 
+		push @class, join ', ', (map "$_->{type} $_->{name}", @args), 
 		  $ellipsis ? "..." : ();
-		$info .= ");\n";
+		push @class, ");\n";
 	    }
-	    $info .= "\t};\n"
+	    push @class, "\t};\n"
 	}
-	$info .= "\n";
     }
-    else {
-        $info .= "No C++ classes have been successfully bound to Perl.\n\n";
-    }
-    if (defined $o->{ILSM}{parser}{data}{functions}) {
-	$info .= "The following C++ functions have been bound to Perl:\n";
+    if (defined $data->{functions}) {
 	for my $function (sort @{$data->{functions}}) {
 	    my $func = $data->{function}{$function};
-	    $info .= "\t" . $func->{rtype} . " ";
-	    $info .= $func->{name} . "(";
+	    next if $function =~ /::/;
+	    next unless $o->check_type($func, 0, 0);
+	    push @func, "\t" . $func->{rtype} . " ";
+	    push @func, $func->{name} . "(";
 	    my @args = grep { $_->{name} ne '...' } @{$func->{args}};
 	    my $ellipsis = (scalar @{$func->{args}} - scalar @args) != 0;
-	    $info .= join ', ', (map "$_->{type} $_->{name}", @args), 
+	    push @func, join ', ', (map "$_->{type} $_->{name}", @args), 
 	      $ellipsis ? "..." : ();
-	    $info .= ");\n";
+	    push @func, ");\n";
 	}
-	$info .= "\n";
     }
-    else {
-	$info .= "No C++ functions have been bound to Perl.\n\n";
+
+    # Report:
+    {
+	local $" = '';
+	$info .= "The following classes have been bound to Perl:\n@class\n"
+	    if @class;
+	$info .= "The following functions have been bound to Perl:\n@func\n"
+	    if @func;
     }
     $info .= Inline::Struct::info($o) if $o->{STRUCT}{'.any'};
     return $info;
@@ -169,7 +172,7 @@ sub info {
 sub get_parser {
     my $o = shift;
     my $grammar = Inline::CPP::grammar::grammar()
-      or croak "Can't find C++ grammar\n";
+	or croak "Can't find C++ grammar\n";
     $::RD_HINT++;
     require Parse::RecDescent;
     my $parser = Parse::RecDescent->new($grammar);
@@ -194,7 +197,7 @@ sub xs_bindings {
     my $o = shift;
     my ($pkg, $module) = @{$o->{API}}{qw(pkg module modfname)};
     my $data = $o->{ILSM}{parser}{data};
-    my $XS = '';
+    my @XS;
 
     warn("Warning: No Inline C++ functions or classes bound to Perl\n" .
 	 "Check your C++ for Inline compatibility.\n\n")
@@ -205,7 +208,8 @@ sub xs_bindings {
     for my $class (@{$data->{classes}}) {
 	my $proper_pkg = $pkg . "::$class";
 	# Set up the proper namespace
-	$XS .= <<END;
+	push @XS, <<END;
+
 MODULE = $module     	PACKAGE = $proper_pkg
 
 PROTOTYPES: DISABLE
@@ -236,33 +240,40 @@ END
 	    # Get/set methods will go here:
 
 	    # Cases we skip:
-            $abstract ||= ($type eq 'method' and $thing->{abstract});
+	    $abstract ||= ($type eq 'method' and $thing->{abstract});
 	    next if ($type eq 'method' and $thing->{abstract});
-	    next unless ($scope eq 'public' and $type eq 'method');
-
-	    # generate an XS wrapper
-	    $ctor ||= ($name eq $class);
-	    $dtor ||= ($name eq "~$class");
-	    $XS .= $o->wrap($thing, $name, $class);
+	    next if $scope ne 'public';
+	    if ($type eq 'enum') {
+		$o->{ILSM}{XS}{BOOT} .= make_enum($proper_pkg, $name,
+						  $thing->{body});
+	    } elsif ($type eq 'method') {
+		next if $name =~ /operator/;
+		# generate an XS wrapper
+		$ctor ||= ($name eq $class);
+		$dtor ||= ($name eq "~$class");
+		push @XS, $o->wrap($thing, $name, $class);
+	    }
 	}
 
 	# Provide default constructor and destructor:
-	$XS .= <<END unless ($ctor or $abstract);
+	push @XS, <<END unless ($ctor or $abstract);
 $class *
 ${class}::new()
 
 END
-	$XS .= <<END unless ($dtor or $abstract);
+	push @XS, <<END unless ($dtor or $abstract);
 void
 ${class}::DESTROY()
 
 END
     }
 
-    my $prefix = (($o->{ILSM}{XS}{PREFIX}) ?
-		  "PREFIX = $o->{ILSM}{XS}{PREFIX}" :
-		  '');
-    $XS .= <<END;
+    my $prefix = (
+	$o->{ILSM}{XS}{PREFIX}
+	? "PREFIX = $o->{ILSM}{XS}{PREFIX}"
+	: ''
+    );
+    push @XS, <<END;
 MODULE = $module     	PACKAGE = $pkg	$prefix
 
 PROTOTYPES: DISABLE
@@ -270,11 +281,21 @@ PROTOTYPES: DISABLE
 END
 
     for my $function (@{$data->{functions}}) {
+	# lose constructor defs outside class decls (and "implicit int")
+	next if $data->{function}{$function}{rtype} eq '';
 	next if $data->{function}{$function}{rtype} =~ 'static'; # special case
-	$XS .= $o->wrap($data->{function}{$function}, $function);
+	next if $function =~ /::/; # XXX: skip member functions?
+	next if $function =~ /operator/; # and operators.
+	push @XS, $o->wrap($data->{function}{$function}, $function);
     }
 
-    return $XS;
+    for (@{$data->{enums}}) {
+	# Global enums.
+	$o->{ILSM}{XS}{BOOT} .= make_enum($pkg, @$_{qw(name body)});
+    }
+#     print "BOOT = \n", $o->{ILSM}{XS}{BOOT};
+
+    return join '', @XS;
 }
 
 #============================================================================
@@ -285,93 +306,100 @@ sub wrap {
     my $thing = shift;
     my $name = shift;
     my $class = shift || "";
+    my $t = ' ' x 4; # indents in 4-space increments.
 
-    my ($XS, $PREINIT, $CODE) = ("", "", "");
+    my (@XS, @PREINIT, @CODE);
     my ($ctor, $dtor) = (0, 0);
 
     if ($name eq $class) { 	# ctor
-	$XS .= $class . " *\n" . $class . "::new";
+	push @XS, $class . " *\n" . $class . "::new";
 	$ctor = 1;
     }
     elsif ($name eq "~$class") { # dtor
-	$XS .= "void\n$class" . "::DESTROY";
+	push @XS, "void\n$class" . "::DESTROY";
 	$dtor = 1;
     }
     elsif ($class) {		# method
-	$XS .= "$thing->{rtype}\n$class" . "::$thing->{name}";
+	push @XS, "$thing->{rtype}\n$class" . "::$thing->{name}";
     }
     else {			# function
-	$XS .= "$thing->{rtype}\n$thing->{name}";
+	push @XS, "$thing->{rtype}\n$thing->{name}";
     }
+
+    return '' unless $o->check_type($thing, $ctor, $dtor);
 
     # Filter out optional subroutine arguments
     my (@args, @opts, $ellipsis, $void);
-    $_->{optional} ? push@opts,$_ : push@args,$_ for @{$thing->{args}};
-    $ellipsis = pop @args if (@args and $args[-1]->{name} eq '...');
+    $_->{optional} ? push @opts, $_ : push @args, $_ for @{$thing->{args}};
+    $ellipsis = pop @args if (@args and $args[-1]{name} eq '...');
     $void = ($thing->{rtype} and $thing->{rtype} eq 'void');
-    $XS .= join '', 
-	     ("(", 
-	      (join ", ", (map {$_->{name}} @args), 
-	         (scalar @opts or $ellipsis) ? '...' : ()),
-	      ")\n",
-	     );
+    push @XS, join '', (
+	"(",
+	join(
+	    ", ",
+	    (map {$_->{name}} @args),
+	    (scalar @opts or $ellipsis) ? '...' : ()
+	),
+	")\n",
+    );
 
     # Declare the non-optional arguments for XS type-checking
-    $XS .= "\t$_->{type}\t$_->{name}\n" for @args;
+    push @XS, "\t$_->{type}\t$_->{name}\n" for @args;
 
     # Wrap "complicated" subs in stack-checking code
     if ($void or $ellipsis) {
-	$PREINIT .= "\tI32 *\t__temp_markstack_ptr;\n";
-	$CODE .= "\t__temp_markstack_ptr = PL_markstack_ptr++;\n";
+	push @PREINIT, "\tI32 *\t__temp_markstack_ptr;\n";
+	push @CODE, "\t__temp_markstack_ptr = PL_markstack_ptr++;\n";
     }
 
     if (@opts) {
-	$PREINIT .= "\t$_->{type}\t$_->{name};\n" for @opts;
-	$CODE .= "switch(items" . ($class ? '-1' : '') . ") {\n";
+	push @PREINIT, "\t$_->{type}\t$_->{name};\n" for @opts;
+	push @CODE, "switch(items" . ($class ? '-1' : '') . ") {\n";
 
 	my $offset = scalar @args; # which is the first optional?
 	my $total = $offset + scalar @opts;
 	for (my $i=$offset; $i<$total; $i++) {
-	    $CODE .= "case " . ($i+1) . ":\n";
+	    push @CODE, "case " . ($i+1) . ":\n";
 	    my @tmp;
 	    for (my $j=$offset; $j<=$i; $j++) {
-		my $targ = $opts[$j-$offset]->{name};
-		my $type = $opts[$j-$offset]->{type};
+		my $targ = $opts[$j-$offset]{name};
+		my $type = $opts[$j-$offset]{type};
 		my $src  = "ST($j)";
-		$CODE .= $o->typeconv($targ,$src,$type,'input_expr')
-		  . ";\n";
+		my $conv = $o->typeconv($targ,$src,$type,'input_expr');
+		push @CODE, $conv . ";\n";
 		push @tmp, $targ;
 	    }
-	    $CODE .= "\t";
-	    $CODE .= "RETVAL = "
-	      unless $void;
-	    call_or_instantiate(\$CODE, $name, $ctor, $dtor, $class, 
-				$thing->{rconst}, $thing->{rtype},
-				(map { $_->{name} } @args), @tmp);
-	    $CODE .= "\tbreak; /* case " . ($i+1) . " */\n";
+	    push @CODE, "\tRETVAL = " unless $void;
+	    push @CODE, call_or_instantiate(
+		$name, $ctor, $dtor, $class, $thing->{rconst},
+		$thing->{rtype}, (map { $_->{name} } @args), @tmp
+	    );
+	    push @CODE, "\tbreak; /* case " . ($i+1) . " */\n";
 	}
-	$CODE .= "default:\n";
-	$CODE .= "\tRETVAL = "
-	  unless $void;
-	call_or_instantiate(\$CODE, $name, $ctor, $dtor, $class, 
-			    $thing->{rconst}, $thing->{rtype},
-			    map { $_->{name} } @args);
-	$CODE .= "} /* switch(items) */ \n";
+	push @CODE, "default:\n";
+	push @CODE, "\tRETVAL = " unless $void;
+	push @CODE, call_or_instantiate(
+	    $name, $ctor, $dtor, $class, $thing->{rconst}, $thing->{rtype},
+	    map { $_->{name} } @args
+	);
+	push @CODE, "} /* switch(items) */ \n";
     }
     elsif ($void) {
-	$CODE .= "\t";
-	call_or_instantiate(\$CODE, $name, $ctor, $dtor, $class, 0, '', 
-			    map { $_->{name} } @args);
+	push @CODE, "\t";
+	push @CODE, call_or_instantiate(
+	    $name, $ctor, $dtor, $class, 0, '', map { $_->{name} } @args
+	);
     }
     elsif ($ellipsis or $thing->{rconst}) {
-	$CODE .= "\t";
-	$CODE .= "RETVAL = ";
-	call_or_instantiate(\$CODE, $name, $ctor, $dtor, $class, 
-			    $thing->{rconst}, $thing->{rtype},
-			    map { $_->{name} } @args);
+	push @CODE, "\t";
+	push @CODE, "RETVAL = ";
+	push @CODE, call_or_instantiate(
+	    $name, $ctor, $dtor, $class, $thing->{rconst}, $thing->{rtype},
+	    map { $_->{name} } @args
+	);
     }
     if ($void) {
-	$CODE .= <<'END';
+	push @CODE, <<'END';
         if (PL_markstack_ptr != __temp_markstack_ptr) {
           /* truly void, because dXSARGS not invoked */
           PL_markstack_ptr = __temp_markstack_ptr;
@@ -382,21 +410,21 @@ sub wrap {
 END
     }
     elsif ($ellipsis) {
-	$CODE .= "\tPL_markstack_ptr = __temp_markstack_ptr;\n";
+	push @CODE, "\tPL_markstack_ptr = __temp_markstack_ptr;\n";
     }
 
     # The actual function:
-    $XS .= "PREINIT:\n$PREINIT" if length $PREINIT;
-    $XS .= "PP" if $void;
-    $XS .= "CODE:\n$CODE" if length $CODE;
-    $XS .= "OUTPUT:\nRETVAL\n" 
-      if (length $CODE and not $void);
-    $XS .= "\n";
-    return $XS;
+    local $" = '';
+    push @XS, "${t}PREINIT:\n@PREINIT" if @PREINIT;
+    push @XS, $t;
+    push @XS, "PP" if $void and @CODE;
+    push @XS, "CODE:\n@CODE" if @CODE;
+    push @XS, "${t}OUTPUT:\nRETVAL\n" if @CODE and not $void;
+    push @XS, "\n";
+    return "@XS";
 }
 
 sub call_or_instantiate {
-    my $text_ref = shift;
     my ($name, $ctor, $dtor, $class, $const, $type, @args) = @_;
 
     # Create an rvalue (which might be const-casted later).
@@ -406,8 +434,7 @@ sub call_or_instantiate {
     $rval .= "THIS->" if ($class and not ($ctor or $dtor));
     $rval .= "$name(" . join (',', @args) . ")";
 
-    $$text_ref .= const_cast($rval, $const, $type);
-    $$text_ref .= ";\n"; # this is a convenience
+    return const_cast($rval, $const, $type) . ";\n";
 }
 
 sub const_cast {
@@ -456,6 +483,67 @@ sub typeconv {
     chomp $ret;
     $ret =~ s/\n/\\\n/g if $preproc;
     return $ret;
+}
+
+# Verify that the return type and all arguments can be bound to Perl.
+sub check_type {
+    my $o = shift;
+    my ($thing, $ctor, $dtor) = @_;
+    my $badtype;
+
+    # strip "useless" modifiers so the type is found in typemap:
+    BADTYPE: while (1) {
+	if (!($ctor || $dtor)) {
+	    my $t = $thing->{rtype};
+	    $t =~ s/^(\s|const|virtual|static)+//g;
+	    if ($t ne 'void' && !$o->typeconv('', '', $t, 'output_expr')) {
+		$badtype = $t;
+		last BADTYPE;
+	    }
+	}
+	foreach (map { $_->{type} } @{$thing->{args}}) {
+	    s/^(const|\s)+//go;
+	    if ($_ ne '...' && !$o->typeconv('', '', $_, 'input_expr')) {
+		$badtype = $_;
+		last BADTYPE;
+	    }
+	}
+	return 1;
+    }
+    # I don't really like this verbosity. This is what 'info' is for. Maybe we
+    # should ask Brian for an Inline=DEBUG option.
+    warn (
+	"No typemap for type $badtype. " .
+	"Skipping $thing->{rtype} $thing->{name}(" .
+	join(', ', map { $_->{type} } @{$thing->{args}}) .
+	")\n"
+    ) if 0;
+    return 0;
+}
+
+# Generate boot-code for enumeration constants:
+sub make_enum {
+    my ($class, $name, $body) = @_;
+    my @enum;
+    push @enum, <<END;
+\t{
+\t    HV * pkg = gv_stashpv(\"$class\", 1);
+\t    if (pkg == NULL)
+\t        croak("Can't find package '$class'\\n");
+END
+    my $val = 0;
+    foreach (@$body) {
+	my ($k, $v) = @$_;
+	$val = $v if defined $v;
+	push @enum, <<END;
+\tnewCONSTSUB(pkg, \"$k\", newSViv($val));
+END
+	++$val;
+    }
+    push @enum, <<END;
+\t}
+END
+    return join '', @enum;
 }
 
 1;

@@ -33,10 +33,14 @@ When run, this complete program prints:
 -----------------------------------------------------------------------------
 FEATURES:
 
-Inline::CPP version 0.23 is a minor upgrade from previous versions. It 
+Inline::CPP version 0.24 is a minor upgrade from previous versions. It
 includes:
 
-+ Bug fix -- allow static member variables
++ unhandled types ignored, rather than causing an error
++ typenames and identifiers can now include more C++ line noise
++ operators are correctly recognized (and ignored)
++ nested classes are ignored
++ non-inline method bodies are ignored
 
 -----------------------------------------------------------------------------
 INSTALLATION:

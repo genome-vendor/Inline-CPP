@@ -2,8 +2,8 @@ use ExtUtils::MakeMaker;
 use Config;
 
 my %PREREQ_PM = (
-	Inline => '0.43',
-	'Inline::C' => '0.43',
+	Inline => '0.42',
+	'Inline::C' => '0.42',
 );
 #============================================================================
 # We'll do our own prerequisite checking, since MakeMaker does it
@@ -73,5 +73,8 @@ close CPP;
 WriteMakefile(
 	      NAME => 'Inline::CPP',
 	      VERSION_FROM => 'CPP.pm',
+	      PREREQ_PM => {
+		  'Inline::C' => '0.42',
+	      },
 	      clean => {FILES => '_Inline/ grammar/_Inline'},
 	     );

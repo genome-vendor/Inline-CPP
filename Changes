@@ -1,5 +1,13 @@
 Revision history for Perl extension Inline::CPP.
 
+0.24  Mon May 27 22:25:38 PDT 2002
+	[Accepted patch from Sean O'Rourke]
+	- unhandled types ignored, rather than causing an error
+	- typenames and identifiers can now include more C++ noise
+	- operators are correctly recognized (and ignored)
+	- nested classes are ignored
+	- non-inline constructor bodies are ignored
+
 0.23  Sun Jul 15 15:53:02 PDT 2001
 	- Allow declaration lists: int a, b;
 	- Allow initializer lists: Foo(double _o) : o(_o) { }
