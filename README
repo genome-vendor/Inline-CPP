@@ -17,23 +17,34 @@ Example:
        SV* data();
      private:
        SV *dat;
-   }
+   };
 
    JAxH::JAxH(char *x) { dat = newSVpvf("Just Another %s Hacker", x); }
    SV* JAxH::data() { return dat; }
 
    END
 
-   print JAxH('Inline')->new()->data(), "\n";
+   print JAxH->new('Inline')->data(), "\n";
 
 When run, this complete program prints:
 
    Just Another Inline Hacker.
 
 -----------------------------------------------------------------------------
+FEATURES:
+
+Inline::CPP version 0.13 is a minor upgrade from previous versions. It includes:
+
++ More XS and MakeMaker features exposed.
++ Improved support for Win32.
+  + Adds the '-TP' flag to force C++ compilation of the XS glue.
++ Added workaround for AIX bug in Config.pm.
++ Better error messages.
+
+-----------------------------------------------------------------------------
 INSTALLATION:
 
-This module requires Inline.pm version 0.30 or higher to be installed.
+This module requires Inline.pm version 0.31 or higher to be installed.
 
 To install Inline::CPP do this:
 

@@ -23,14 +23,15 @@ part: comment
       {
 #         print "found a function: $item[1]->{name}\n";
          my $func = $item[1]->{name};
-         push @{$thisparser->{data}->{functions}}, $func;
-         $thisparser->{data}->{function}->{$func}->{return_type} =
-            $item[1]->{rtype};
+	 my %func = ();
+         $func{return_type} = $item[1]->{rtype};
 	 for my $arg (@{$item[1]->{args}}) {
-	    push @{$thisparser->{data}->{function}->{$func}->{arg_names}},
-	         $arg->{name};
-	    push @{$thisparser->{data}->{function}->{$func}->{arg_types}},
-	         $arg->{type};
+	    push @{$func{arg_names}}, $arg->{name};
+	    push @{$func{arg_types}}, $arg->{type};
+	 }
+	 unless ($func =~ /::/) {
+	     push @{$thisparser->{data}->{functions}}, $func;
+	     $thisparser->{data}->{function}->{$func} = \%func;
 	 }
       }
     | all

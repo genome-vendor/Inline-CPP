@@ -13,7 +13,7 @@ Inline::CPP - Write Perl subroutines and classes in C++.
       return x + y;
    }
 
-   int subtract(int x, inty) {
+   int subtract(int x, int y) {
       return x - y;
    }
 
@@ -25,9 +25,9 @@ The C<Inline::CPP> module allows you to put C++ source code directly
 "inline" in a Perl script or module. You code classes or functions in
 C++, and you can use them as if they were written in Perl.
 
-=head2 Using the Inline::CPP Module
+=head1 Using Inline::CPP
 
-Inline::CPP is very similar to L<Inline::C>. It uses a grammar to
+Inline::CPP is very similar to Inline::C. It uses a grammar to
 parse your C++ code, and binds to functions or classes which are
 recognized. If a function is recognized, it will be available from
 Perl space. If the function's signature is not recognized, it will not
@@ -67,8 +67,8 @@ Example 1:
 
    END
 
-Perl's namespace will look very much like this: (assuming this script
-was run from main)
+After running the code above, Perl's namespace would look similar to if
+following code had been run:
 
    sub main::doodle { }
 
@@ -80,9 +80,99 @@ was run from main)
    sub get_data { my $o=shift; $o->{data} }
    sub set_data { my $o=shift; $o->{data} = shift }
 
-The difference, of course, is that in the latter, non-Foo objects
-could directly access $o->{data}, but in C++ Foo::data is completely
-hidden.
+The difference, of course, is that in the latter, Perl does the work. In the
+Inline::CPP example, all function calls get sent off to your C++ code. That
+means that things like this won't work:
+
+   my $obj = new Foo;
+   $obj->{extrafield} = 10;
+
+It doesn't work because C<$obj> is not a blessed hash. It's a blessed
+reference to a C++ object (and anyway, C++ wouldn't let you do that either,
+since extrafield wasn't defined).
+
+=head1 C++ Configuration Options
+
+For information on how to specify Inline configuration options, see
+L<Inline>. This section describes each of the configuration options
+available for C. Most of the options correspond either the MakeMaker
+or XS options of the same name. See L<ExtUtils::MakeMaker> and
+L<perlxs>.
+
+=head2 AUTO_INCLUDE
+
+Specifies extra statements to be automatically included. They will be
+added on to the defaults. A newline char will automatically be added. 
+
+   use Inline CPP => Config => AUTO_INCLUDE => '#include "something.h"';
+
+=head2 BOOT
+
+Specifies code to be run when your code is loaded. May not contain any
+blank lines. See L<perlxs> for more information.
+
+   use Inline CPP => Config => BOOT => 'foo();';
+
+=head2 CC
+
+Specifies which compiler to use.
+
+=head2 CCFLAGS
+
+Specifies extra compiler flags. Corresponds to the MakeMaker option.
+
+=head2 INC
+
+Specifies extra include directories. Corresponds to the MakeMaker
+parameter.
+
+   use Inline CPP => Config => INC => '-I/my/path';
+
+=head2 LD
+
+Specifies the linker to use.
+
+=head2 LDDLFLAGS
+
+Specifies which linker flags to use.
+
+NOTE: These flags will completely override the existing flags, instead
+of just adding to them. So if you need to use those too, you must
+respecify them here.
+
+=head2 LIBS
+
+Specifies external libraries that should be linked into your
+code. Corresponds to the MakeMaker parameter.
+
+   use Inline CPP => Config => LIBS => '-L/your/path -lyourlib';
+
+=head2 MAKE
+
+Specifies the name of the 'make' utility to use.
+
+=head2 MYEXTLIB
+
+Specifies a user compiled object that should be linked in. Corresponds
+to the MakeMaker parameter.
+
+   use Inline CPP => Config => MYEXTLIB => '/your/path/something.o';
+
+=head2 PREFIX
+
+Specifies a prefix that will automatically be stripped from C++
+functions when they are bound to Perl. Less useful than in C, because
+C++ mangles its function names so they don't conflict with C functions
+of the same name.
+
+   use Inline CPP => Config => PREFIX => 'ZLIB_';
+
+=head2 TYPEMAPS
+
+Specifies extra typemap files to use. These types will modify the
+behaviour of C++ parsing. Corresponds to the MakeMaker parameter.
+
+   use Inline CPP => Config => TYPEMAPS => '/your/path/typemap';
 
 =head2 C++-Perl Bindings
 
@@ -106,17 +196,16 @@ If you have very complicated data structures in either C++ or Perl,
 you should just pass them as an SV* and do the conversion yourself in
 your C++ function.
 
-For more information on passing data between C, C++, and Perl, see
-L<Inline::C> and L<Inline::C-Cookbook>. For C<WMTYEWTK>, see the
-L<perlxs>, L<perlxstut>, L<perlapi>, and L<perlguts> manpages.
+
 
 =head1 SEE ALSO
 
-For general information about how C<Inline> binds code to Perl, see L<Inline>.
+For general information about how C<Inline> binds code to Perl, see
+L<Inline>.
 
 For information on using C with Perl, see L<Inline::C> and
-L<Inline::C-Cookbook>. For C<WMTYEWTK>, see the L<perlxs>,
-L<perlxstut>, L<perlapi>, and L<perlguts> manpages.
+L<Inline::C-Cookbook>. For C<WMTYEWTK>, see L<perlxs>,
+L<perlxstut>, L<perlapi>, and L<perlguts>.
 
 =head1 BUGS AND DEFICIENCIES
 
@@ -137,8 +226,8 @@ The grammar used for parsing C++ is very simple, and does not allow
 several important features of C++:
 
   o templates;
-  o inheritance;
-  o inline class methods;
+  o inheritance; and,
+  o inline class methods.
 
 Other grammar problems will probably be noticed quickly.
 
@@ -158,7 +247,9 @@ Inline::CPP.
 
 Copyright (c) 2000 - 2001, Neil Watkiss.
 
-All Rights Reserved. This module is free software. It may be used, redistributed and/or modified under the terms of the Perl Artistic License.
+All Rights Reserved. This module is free software. It may be used,
+redistributed and/or modified under the terms of the Perl Artistic
+License.
 
 See http://www.perl.com/perl/misc/Artistic.html
 

@@ -7,8 +7,6 @@ use Inline Config => DIRECTORY => './blib_test';
 use strict;
 use Inline CPP => <<END; 
 
-#include <iostream.h>
-
 void prn() {
     cout << "prn() called!" << endl;
 }

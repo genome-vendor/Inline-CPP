@@ -1,0 +1,13 @@
+Revision history for Perl extension Inline::CPP.
+
+0.13  Sun Mar  4 22:09:35 PST 2001
+	- Added Win32-specific configuration code to add '-TP' flag to compiler
+	- Special case for AIX ($Config{so})
+	- Added the following configuration options: 'CC', 'LD', 'CCFLAGS', 'LDDLFLAGS', 'MYEXTLIB', and 'MAKE': proxies for the MakeMaker options of the same name.
+
+0.12  Sun Jan 21 17:16:43 PST 2001
+	- Upgraded modules to conform to Inline-0.31
+	- Documentation upgrades
+
+0.11  Thu Nov 23 16:46:27 PST 2000
+	- Created Inline::CPP. 

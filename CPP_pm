@@ -3,6 +3,7 @@ package Inline::CPP;
 use strict;
 require Inline;
 require Inline::CPP::Grammar;
+use Config;
 use Carp;
 use Data::Dumper;
 use Parse::RecDescent;
@@ -12,17 +13,18 @@ use Cwd qw(cwd);
 use vars qw(@ISA $VERSION);
 
 @ISA = qw(Inline);
-$VERSION = "0.12";
+$VERSION = "0.13";
 
 #============================================================================
 # Register Inline::CPP as an Inline language module
 #============================================================================
 sub register {
+    my $suffix = ($^O eq 'aix') ? 'so' : $Config{so};
     return {
 	    language => 'CPP',
-	    aliases => ['cpp', 'C++', 'Cplusplus', 'c++'],
+	    aliases => ['cpp', 'C++', 'c++', 'Cplusplus', 'cplusplus'],
 	    type => 'compiled',
-	    suffix => 'so',
+	    suffix => $suffix,
 	   };
 }
 
@@ -35,8 +37,9 @@ sub validate {
     $o->{CPP} = {};
     $o->{CPP}{XS} = {};
     $o->{CPP}{MAKEFILE} = {};
-    $o->{CPP}{MAKEFILE}{CC} ||= 'g++';  # COMPILER
-    $o->{CPP}{MAKEFILE}{LD} ||= 'g++';  # LINKER
+    $o->{CPP}{MAKEFILE}{CC} ||= '@COMPILER'; # default compiler
+    $o->{CPP}{MAKEFILE}{LD} ||= '@LINKER';   # default linker
+    $o->{CPP}{MAKEFILE}{LIBS} ||= '@DEFAULTLIBS'; # default libs
     $o->{CPP}{AUTO_INCLUDE} ||= <<'END';
 /* include this first, else g++ gets parse errors on some versions of perl */
 #include <iostream.h>
@@ -50,49 +53,51 @@ END
     while (@_) {
 	my ($key, $value) = (shift, shift);
 
+	if ($key eq 'MAKE') {
+	    $o->{CPP}{$key} = $value;
+	    next;
+	}
+	if ($key eq 'CC' or
+	    $key eq 'LD') {
+	    $o->{CPP}{MAKEFILE}{$key} = $value;
+	    next;
+	}
 	if ($key eq 'LIBS') {
 	    add_list($o->{CPP}{MAKEFILE}, $key, $value, []);
+	    next;
 	}
-	elsif ($key eq 'INC') {
+	if ($key eq 'INC' or
+	       $key eq 'MYEXTLIB' or
+	       $key eq 'CCFLAGS' or
+	       $key eq 'LDDLFLAGS') {
 	    add_string($o->{CPP}{MAKEFILE}, $key, $value, '');
+	    next;
 	}
-	elsif ($key eq 'TYPEMAPS') {
-	    add_list($o->{CPP}{MAKEFILE}, $key, $value, []);
+	if ($key eq 'TYPEMAPS') {
+            croak "TYPEMAPS file '$value' not found"
+              unless -f $value;
+            my ($path, $file) = ($value =~ m|^(.*)[/\\](.*)$|) ?
+              ($1, $2) : ('.', $value);
+            $value = abs_path($path) . '/' . $file;
+            add_list($o->{CPP}{MAKEFILE}, $key, $value, []);
+            next;
 	}
-	elsif ($key eq 'MYEXTLIB') { 
-	    add_string($o->{CPP}{MAKEFILE}, $key, $value, '');
-	}
-	elsif ($key eq 'CC') {
-	    $o->{CPP}{MAKEFILE}{CC} = $value;
-	}
-	elsif ($key eq 'LD') {
-	    $o->{CPP}{MAKEFILE}{LD} = $value;
-	}
-	elsif ($key eq 'AUTO_INCLUDE') {
+	if ($key eq 'AUTO_INCLUDE') {
 	    add_list($o->{CPP}, $key, $value, '');
+	    next;
 	}
-	elsif ($key eq 'BOOT') {
+	if ($key eq 'BOOT') {
 	    add_text($o->{CPP}{XS}, $key, $value, '');
+	    next;
 	}
-	elsif ($key eq 'PREFIX') {
+	if ($key eq 'PREFIX') {
 	    croak "Invalid value for 'PREFIX' option"
 	      unless ($value =~ /^\w*$/ and
 		      $value !~ /\n/);
 	    $o->{CPP}{XS}{PREFIX} = $value;
+	    next;
 	}
-	elsif ($key eq 'MANGLE') {
-	    $value = '' unless $value;
-	    $value = 'Inline_' if $value eq '1';
-	    croak "Invalid value for 'MANGLE' option"
-	      unless ($value =~ /^\w*$/ and
-		      $value !~ /\n/);
-	    $o->{CPP}{XS}{MANGLE} = $value;
-	    $o->{CPP}{XS}{PREFIX} = $value;
-	}
-	else {
-	    croak "$key is not a valid config option for C++\n";
-	}
-	next;
+	croak "$key is not a valid config option for C++\n";
     }
 }
 
@@ -158,32 +163,15 @@ sub build {
 sub info {
     my $o = shift;
     my $info = "";
-    
+
     $o->parse unless $o->{parser};
-    
+
     my $parser = $o->{parser};
     my $data = $parser->{data};    
-    if (@{$o->{parser}->{data}->{functions}||[]}) {
-	$info .= "The following public C++ functions have been bound to Perl:\n";
-	for my $function (sort @{$data->{functions}}) {
-	    next if $function =~ /::/;
-	    my $return_type = $data->{function}->{$function}->{return_type}||"";
-	    my @arg_names = @{$data->{function}->{$function}->{arg_names}||[]};
-	    my @arg_types = @{$data->{function}->{$function}->{arg_types}||[]};
-	    my @args = map {$_ . ' ' . shift @arg_names} @arg_types;
-	    $info .= ("\t" .
-		      ($return_type 
-		       ? "$return_type $function(" . join(', ', @args) . ")"
-		       : "$function(" . join(', ', @args) .  ")") .
-		      "\n");
-	}
-	$info .= "\n";
-    }
-    else {
-	$info .= "No public C++ functions have been bound to Perl.\n\n";
-    }
-
-    if (@{$o->{parser}->{data}->{classes}||[]}) {
+    
+    print Dumper $o->{parser}->{data};
+    
+    if (defined $o->{parser}->{data}->{classes}) {
         $info .= "The following C++ classes have been bound to Perl:\n";
 	for my $class (sort @{$data->{classes}}) {
 	    $info .= "\t$class\n";
@@ -202,6 +190,25 @@ sub info {
     }
     else {
         $info .= "No C++ classes have been successfully bound to Perl.\n\n";
+    }
+    if (defined $o->{parser}->{data}->{functions}) {
+	$info .= "The following public C++ functions have been bound to Perl:\n";
+	for my $function (sort @{$data->{functions}}) {
+	    next if $function =~ /::/; # Even though this is caught in Grammar.
+	    my $return_type = $data->{function}->{$function}->{return_type}||"";
+	    my @arg_names = @{$data->{function}->{$function}->{arg_names}||[]};
+	    my @arg_types = @{$data->{function}->{$function}->{arg_types}||[]};
+	    my @args = map {$_ . ' ' . shift @arg_names} @arg_types;
+	    $info .= ("\t" .
+		      ($return_type 
+		       ? "$return_type $function(" . join(', ', @args) . ")"
+		       : "$function(" . join(', ', @args) .  ")") .
+		      "\n");
+	}
+	$info .= "\n";
+    }
+    else {
+	$info .= "No public C++ functions have been bound to Perl.\n\n";
     }
     return $info;
 }
@@ -223,9 +230,19 @@ sub parse {
 
 sub get_maps {
     my $o = shift;
-    unshift @{$o->{CPP}{makefile}{TYPEMAPS}}, "$Config::Config{installprivlib}/ExtUtils/typemap";
+
+    my $typemap = '';
+    $typemap = "$Config::Config{installprivlib}/ExtUtils/typemap"
+      if -f "$Config::Config{installprivlib}/ExtUtils/typemap";
+    $typemap = "$Config::Config{privlibexp}/ExtUtils/typemap"
+      if (not $typemap and -f "$Config::Config{privlibexp}/ExtUtils/typemap");
+    warn "Can't find the default system typemap file"
+      if (not $typemap and $^W);
+
+    unshift @{$o->{CPP}{MAKEFILE}{TYPEMAPS}}, $typemap if $typemap;
+
     if (-f "$FindBin::Bin/typemap") {
-	push @{$o->{CPP}{makefile}{TYPEMAPS}}, "$FindBin::Bin/typemap";
+	push @{$o->{CPP}{MAKEFILE}{TYPEMAPS}}, "$FindBin::Bin/typemap";
     }
 }
 
@@ -238,7 +255,7 @@ sub get_types {
     my $o = shift;
 
     my $proto_re = "[" . quotemeta('\$%&*@;') . "]";
-    foreach my $typemap (@{$o->{CPP}{makefile}{TYPEMAPS}}) {
+    foreach my $typemap (@{$o->{CPP}{MAKEFILE}{TYPEMAPS}}) {
 	next unless -e $typemap;
 	# skip directories, binary files etc.
 	warn("Warning: ignoring non-text typemap file '$typemap'\n"), next 
@@ -327,11 +344,11 @@ sub C_string ($) {
 sub write_XS {
     my $o = shift;
     my ($pkg, $module, $modfname) = @{$o}{qw(pkg module modfname)};
-    
+
     $o->mkpath($o->{build_dir});
     open XS, "> $o->{build_dir}/$modfname.xs"
       or croak $!;
-    
+
     print XS <<END;
 $o->{CPP}{AUTO_INCLUDE}
 $o->{code}
@@ -376,13 +393,13 @@ END
 		      (join ", ", map {$_->{name}} @{$thing->{args}}),
 		      ")\n",
 		     );
-	    
+	
 	    for my $arg (@{$thing->{args}}) {
 		print XS "\t$arg->{type}\t$arg->{name}\n";
 	    }
 
 	    print XS "\n";
-	    
+	
 	}
     }
 
@@ -442,7 +459,7 @@ END
 END
 	}
     }
-    
+
     if (defined $o->{CPP}{XS}{BOOT} and
 	$o->{CPP}{XS}{BOOT}) {
 	print XS <<END;
@@ -450,7 +467,7 @@ BOOT:
 $o->{CPP}{XS}{BOOT}
 END
     }
-    
+
     close XS;
 }
 
@@ -561,7 +578,7 @@ END
 # Run the build process.
 #==============================================================================
 sub compile {
-    use strict; 
+    use strict;
     use Cwd;
     my ($o, $perl, $make, $cmd, $cwd);
     $o = shift;
@@ -570,7 +587,7 @@ sub compile {
 
     -f ($perl = $Config::Config{perlpath})
       or croak "Can't locate your perl binary";
-    ($make = $Config::Config{make})
+    $make = $o->{CPP}{MAKE} || $Config::Config{make}
       or croak "Can't locate your make binary";
     $cwd = &cwd;
     for $cmd ("$perl Makefile.PL > out.Makefile_PL 2>&1",
