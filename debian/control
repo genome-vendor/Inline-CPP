@@ -2,14 +2,14 @@ Source: libinline-cpp-perl
 Section: perl
 Priority: optional
 Build-Depends: debhelper (>= 7)
-Build-Depends-Indep: perl, perl/libinline-perl (>= 0.42)
+Build-Depends-Indep: perl, libinline-perl (>= 0.42)
 Maintainer: Randy Hancock <rhancock@>
 Standards-Version: 3.8.3
 Homepage: http://search.cpan.org/dist/Inline-CPP/
 
 Package: libinline-cpp-perl
 Architecture: all
-Depends: ${perl:Depends}, ${misc:Depends}, perl/libinline-perl (>= 0.42)
+Depends: ${perl:Depends}, ${misc:Depends}, libinline-perl (>= 0.42)
 Description: Write Perl subroutines and classes in C++.
  The Inline::CPP module allows you to put C++ source code directly "inline" in
  a Perl script or module. You code classes or functions in C++, and you can
