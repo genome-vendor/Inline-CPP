@@ -59,6 +59,9 @@ my $cpp_compiler = prompt("What default C++ compiler would you like to use?",
 my $libs = prompt("What default libraries would you like to include?",
 		  $libs_guess);
 
+my $std_iostream = prompt("Which default you want to use for STD_IOSTREAM ?",
+		  'true' );
+
 # Apply the defaults:
 open CPP, "CPP.pm";
 my @lines = <CPP>;
@@ -67,10 +70,11 @@ close CPP;
 for (@lines) {
     s|\@COMPILER|$cpp_compiler| if m|\# default compiler|;
     s|\@DEFAULTLIBS|$libs| if m|\# default libs|;
+    s|\@STD_IOSTREAM|$std_iostream| if m|\# default iostream|;
 }
 
-open CPP, ">CPP.pm"
-  or die "Can't write to CPP.pm!";
+open CPP, ">lib/Inline/CPP.pm"
+  or die "Can't write to lib/Inline/CPP.pm!";
 print CPP @lines;
 close CPP;
 

@@ -29,8 +29,10 @@ sub register {
 #============================================================================
 sub validate {
     my $o = shift;
-    $o->{ILSM}{MAKEFILE}{CC} ||= 'g++'; # default compiler
-    $o->{ILSM}{MAKEFILE}{LIBS} ||= ['-lstdc++']; # default libs
+    $o->{ILSM}{MAKEFILE}{CC} ||= '@COMPILER'; # default compiler
+    $o->{ILSM}{MAKEFILE}{LIBS} ||= ['@DEFAULTLIBS']; # default libs
+    $o->{ILSM}{STD_IOSTREAM} ||= '@STD_IOSTREAM'; # default iostream
+
 
     # I haven't traced it out yet, but $o->{STRUCT} gets set before getting
     # properly set from Inline::C's validate().
@@ -90,7 +92,9 @@ END
 
     # Replace %iostream% with the correct iostream library
     my $iostream = "iostream";
+
     $iostream .= ".h" unless $o->{ILSM}{STD_IOSTREAM};
+
     $o->{ILSM}{AUTO_INCLUDE} =~ s|%iostream%|$iostream|g;
 
     # Forward all unknown requests up to Inline::C
